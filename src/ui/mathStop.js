@@ -303,6 +303,10 @@ export function showMathStop(scene, problem, opts, onAnswer, onClose) {
 
     const keyboard = scene.input.keyboard;
     const onKey = (event) => {
+        // Phaser re-dispatches every queued key event each time a new one
+        // arrives in the same frame, so fast typing would repeat digits.
+        if (event.mkHandled) return;
+        event.mkHandled = true;
         if (state.answered || state.closed || isWhiteboardOpen()) return;
         const k = event.key;
         if (typed) {
