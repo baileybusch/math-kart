@@ -32,12 +32,21 @@ If you want to run it on your computer instead:
 
 ## What Your Child Will Do
 
-1. **Pick a track** on the menu (Forest to start, Desert unlocks in the Shop)
-2. **Tap START RACE**, wait for 3-2-1-GO!
-3. **Drive to the yellow stars.** The yellow arrow next to your kart points to the next one
-4. **Solve the Math Stop** at each star - a right answer gives 5 coins! 💰
-5. **Race 2 laps** (3 stars per lap) and cross the checkered line
-6. **Win prize coins** (1st place = 50!) and visit the **Shop**
+1. **Pick your grade** on the menu: **Grade 3** (add, subtract, units, × ÷)
+   or **Grade 7** (similar figures & ratios). The game remembers it.
+2. **Pick a track**: Meadow Loop is free. Unlock more in the Shop, in order:
+   Desert Canyon (100) → Pine Path (250) → Snow Circuit (450) → Night City (700).
+   Harder tracks pay bigger prizes (1st place: 50 on Meadow up to 90 in Night City)
+3. **Tap START RACE**, wait for 3-2-1-GO!
+4. **Drive to the yellow stars.** The yellow arrow next to your kart points to the next one
+5. **Solve the Math Stop** at each star 💰
+   - Tap an answer button, or type the number on the big keypad and tap **Check**
+   - Stuck? **Show hint** gives a step to get started (right answers then pay half)
+   - **Whiteboard** opens a scratch pad to draw on with a finger. **Done** goes back to the question
+   - Right, no hint: **+6** (Grade 3) / **+10** (Grade 7). With a hint: +3 / +5
+   - Wrong after a hint: −3 / −5. **Wrong guess with no hint: −6 / −10** (the worst, so try a hint!)
+6. **Race 2 laps** (3 stars per lap) and cross the checkered line
+7. **Win prize coins** (1st place = 50!) and visit the **Shop**
 
 ---
 
@@ -52,7 +61,8 @@ If you want to run it on your computer instead:
 
 ### Desktop Computer
 - **Arrow Keys** ⬆️⬇️⬅️➡️ or WASD to drive
-- **Click numbers** for math answers
+- **Click answers**, or type digits and press Enter on keypad questions
+- **Draw on the whiteboard** with the mouse
 
 ---
 
@@ -60,30 +70,28 @@ If you want to run it on your computer instead:
 
 - Stay on the road - grass slows you down!
 - Try to get 1st place for maximum coins
-- Unlock the Desert track (costs 100 coins)
+- Save up to unlock the next track on the ladder (100, 250, 450, then 700 coins)
 - Buy Speed and Steering upgrades
 - Change your kart paint in the shop
-- Wrong answers are OK - the game shows the right answer, and coins never go below 0!
+- Wrong answers are OK - the game shows the right answer and how to get it, and coins never go below 0!
+- Guessing costs more than asking for a hint. Use **Show hint** or the **Whiteboard** first
 
 ---
 
-## Math Topics (3 Packs Included!)
+## Math Topics (pick a grade)
 
-The game teaches:
+**Grade 3**
+- 2-digit addition & subtraction, unit conversions (mL/L, g/kg, m/cm)
+- Times tables (2, 5, 10; 2-5 × 2-10)
+- Division facts (no remainders)
 
-**Addition & Subtraction:**
-- 2-digit addition & subtraction
-- Unit conversions (mL/L, g/kg, m/cm)
-
-**Multiplication Facts:**
-- Times tables (2, 5, 10)
-- Basic multiplication (2-5 × 2-10)
-
-**Division Facts:**
-- Division with 2, 5, 10
-- Basic division (no remainders)
-
-All problems are early 3rd grade level!
+**Grade 7: Similar Figures** (like the 7.2.8.B homework sheet)
+- Are these two figures similar? Compare matching sides
+- The figures are similar, find x (rectangles, right triangles,
+  parallelograms, L-shapes)
+- Word problems: flag vs. drawing, desks, enlarged photos, tree shadows
+- Scale factor and proportions (3/4 = x/20)
+- Decimal answers: round to 2 places (6.67) or type a fraction (20/3)
 
 ---
 
@@ -91,7 +99,7 @@ All problems are early 3rd grade level!
 
 **Getting the newest version on the iPad (Safari has no "hard refresh")**
 1. Open the link with a new number on the end, e.g.
-   `https://baileybusch.github.io/math-kart/?v=3`
+   `https://baileybusch.github.io/math-kart/?v=4`
    (any number you haven't used before forces a fresh download).
 2. Still old or blank? **Settings → Safari → Advanced → Website Data →**
    search "github" → swipe left → **Delete**, then reopen the link.

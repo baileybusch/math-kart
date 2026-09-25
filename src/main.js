@@ -5,6 +5,7 @@ import RaceHudScene from './scenes/RaceHudScene.js';
 import ShopScene from './scenes/ShopScene.js';
 import { GAME_WIDTH, GAME_HEIGHT } from './ui/theme.js';
 import { ensureSaveData } from './utils/saveManager.js';
+import { whiteboardInfo } from './ui/whiteboard.js';
 import {
     chooseRenderer, rememberRenderer, rendererName, reportBootError, whenDomReady
 } from './boot.js';
@@ -79,7 +80,7 @@ function startGame() {
     }
 
     watchForContextLoss(game);
-    window.mathKart = { game, renderer: rendererName(game), rendererReason: choice.reason };
+    window.mathKart = { game, renderer: rendererName(game), rendererReason: choice.reason, whiteboard: whiteboardInfo };
 }
 
 whenDomReady(startGame);

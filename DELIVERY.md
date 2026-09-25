@@ -7,6 +7,18 @@
 > checklist, and [QUICKSTART.md](QUICKSTART.md) for how to load the new
 > version on the iPad. Some details below (controls, screens) predate the
 > redesign.
+>
+> **Update 2 (v4):** grade select (Grade 3 / Grade 7 Similar Figures),
+> typed answers on a number keypad, hints, a steeper penalty for wrong
+> guesses, and a scratch whiteboard. Coins per Math Stop are now +6/+3/−3/−6
+> (Grade 3) and +10/+5/−5/−10 (Grade 7) instead of +5/−2; see "Coins, hints
+> and penalties" in [NOTES.md](NOTES.md). Load it on the iPad with
+> `https://baileybusch.github.io/math-kart/?v=4`.
+>
+> **Also in v4:** five tracks on an unlock ladder: Meadow Loop (free, was
+> "Forest Loop"), Desert Canyon 100, Pine Path 250, Snow Circuit 450, Night
+> City 700. Each needs the one before, and harder tracks pay bigger prizes.
+> See "Track unlock ladder" in [NOTES.md](NOTES.md).
 
 ## ✅ ALL COMPLETE - Ready to Play!
 

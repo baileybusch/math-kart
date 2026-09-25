@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
 import { getSaveData, updateSaveData } from '../utils/saveManager.js';
-import { getMixedProblem } from '../math/mathPacks.js';
+import { getProblemForGrade, getGrade } from '../math/grades.js';
+import { coinDelta, coinRules } from '../math/economy.js';
 import { createTrack } from '../game/trackBuilder.js';
-import { nearestOnLoop, pointAt } from '../game/trackMath.js';
+import { pointAt } from '../game/trackMath.js';
+import { kartStats, stepKart, updateProgress, reachedCheckpoint } from '../game/raceLogic.js';
+import { courseStatus } from '../game/courses.js';
 import AIKart from '../game/AIKart.js';
 import { COLORS, drawKart, kartColor } from '../ui/theme.js';
 
 export const LAPS = 2;
-export const PRIZES = [50, 30, 15];
-const CORRECT_COINS = 5;
-const WRONG_COINS = 2;
 
 export default class RaceScene extends Phaser.Scene {
     constructor() {
@@ -18,6 +18,7 @@ export default class RaceScene extends Phaser.Scene {
 
     init(data) {
         this.courseId = (data && data.course) || 'forest';
+        if (courseStatus(this.courseId, getSaveData().unlockedCourses) !== 'unlocked') this.courseId = 'forest';
     }
 
     create() {
@@ -26,6 +27,7 @@ export default class RaceScene extends Phaser.Scene {
         updateSaveData(save);
 
         this.coins = save.coins;
+        this.grade = getGrade(save.grade).id;
         this.lap = 0;
         this.cpInLap = 0;
         this.raceStarted = false;
@@ -34,7 +36,7 @@ export default class RaceScene extends Phaser.Scene {
         this.menuPaused = false;
         this.inMathStop = false;
         this.finishOrder = [];
-        this.stats = { correct: 0, asked: 0 };
+        this.stats = { correct: 0, asked: 0, hints: 0 };
         this.hud = null;
 
         this.track = createTrack(this, this.courseId);
@@ -43,8 +45,8 @@ export default class RaceScene extends Phaser.Scene {
 
         this.player = this.createPlayer(save);
         this.aiKarts = [
-            new AIKart(this, this.track, { name: 'Zoom', color: COLORS.orange, speed: 225, lane: -48, along: -70 }),
-            new AIKart(this, this.track, { name: 'Bolt', color: COLORS.blue, speed: 205, lane: 0, along: -170 })
+            new AIKart(this, this.track, { name: 'Zoom', color: COLORS.orange, speed: 225 * this.track.aiSpeed, lane: -48, along: -70 }),
+            new AIKart(this, this.track, { name: 'Bolt', color: COLORS.blue, speed: 205 * this.track.aiSpeed, lane: 0, along: -170 })
         ];
 
         this.arrow = this.add.graphics();
@@ -81,9 +83,7 @@ export default class RaceScene extends Phaser.Scene {
         kart.setDepth(5);
 
         kart.speed = 0;
-        kart.maxSpeed = 300 + save.speedUpgrades * 30;
-        kart.acceleration = 230 + save.speedUpgrades * 20;
-        kart.turnSpeed = 2.6 + save.handlingUpgrades * 0.3;
+        Object.assign(kart, kartStats(save));
         kart.segHint = this.track.loop.segs.length - 1;
         kart.along = -70;
         kart.offRoad = false;
@@ -144,56 +144,15 @@ export default class RaceScene extends Phaser.Scene {
     }
 
     drivePlayer(delta) {
-        const kart = this.player;
-        const dt = delta / 1000;
-        const input = this.readControls();
-
-        if (input.forward) {
-            kart.speed = Math.min(kart.speed + kart.acceleration * dt, kart.maxSpeed);
-        } else if (input.backward) {
-            kart.speed = Math.max(kart.speed - kart.acceleration * 1.6 * dt, -kart.maxSpeed * 0.4);
-        } else {
-            kart.speed *= Math.max(0, 1 - 1.6 * dt);
-        }
-
-        const cap = kart.offRoad ? kart.maxSpeed * 0.55 : kart.maxSpeed;
-        if (kart.speed > cap) kart.speed = Math.max(cap, kart.speed - 500 * dt);
-
-        const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-        if (steer !== 0) {
-            const grip = 0.45 + 0.55 * Math.min(1, Math.abs(kart.speed) / 160);
-            const dir = kart.speed < -5 ? -1 : 1;
-            kart.rotation += steer * dir * kart.turnSpeed * grip * dt;
-        }
-
-        kart.x += Math.sin(kart.rotation) * kart.speed * dt;
-        kart.y -= Math.cos(kart.rotation) * kart.speed * dt;
-        kart.x = Phaser.Math.Clamp(kart.x, 40, this.track.width - 40);
-        kart.y = Phaser.Math.Clamp(kart.y, 40, this.track.height - 40);
+        stepKart(this.player, this.readControls(), delta / 1000, this.track.width, this.track.height);
     }
 
     trackPlayerProgress() {
-        const kart = this.player;
-        const L = this.trackLength;
-        const near = nearestOnLoop(this.track.loop, kart.x, kart.y, kart.segHint);
-        kart.segHint = near.seg;
-        kart.offRoad = near.dist > this.track.roadHalfWidth + 10;
-
-        let along = near.along;
-        const allCheckpointsDone = this.cpInLap >= this.track.checkpoints.length;
-        if (this.cpInLap === 0 && along > L * 0.75) along -= L;
-        if (allCheckpointsDone && along < L * 0.25) along += L;
-        kart.along = along;
-
-        if (allCheckpointsDone && along >= L) {
-            this.lap++;
-            this.cpInLap = 0;
-            kart.along -= L;
-            if (this.lap >= LAPS) {
-                this.finishRace();
-            } else if (this.hud) {
-                this.hud.flashMessage('Lap ' + (this.lap + 1) + '!');
-            }
+        if (!updateProgress(this, this.player, this.track)) return;
+        if (this.lap >= LAPS) {
+            this.finishRace();
+        } else if (this.hud) {
+            this.hud.flashMessage('Lap ' + (this.lap + 1) + '!');
         }
     }
 
@@ -204,30 +163,29 @@ export default class RaceScene extends Phaser.Scene {
     }
 
     checkCheckpoints() {
-        if (this.raceFinished || this.cpInLap >= this.track.checkpoints.length) return;
-        const cp = this.track.checkpoints[this.cpInLap];
-        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, cp.x, cp.y);
-        if (dist < 135) {
-            this.cpInLap++;
-            this.showMathStop();
-        }
+        if (this.raceFinished || !reachedCheckpoint(this, this.player, this.track)) return;
+        this.cpInLap++;
+        this.showMathStop();
     }
 
     showMathStop() {
-        if (!this.hud) return;
+        if (!this.hud || this.inMathStop || this.raceFinished) return;
         this.inMathStop = true;
         this.refreshPause();
-        const problem = getMixedProblem();
-        const label = 'Lap ' + (this.lap + 1) + ' \u2022 Star ' + this.cpInLap;
-        this.hud.showMathProblem(problem, label, (correct) => {
+        const grade = this.grade;
+        const problem = getProblemForGrade(grade);
+        const label = getGrade(grade).label + ' \u2022 Lap ' + (this.lap + 1) + ' \u2022 Star ' + this.cpInLap;
+        let scored = false;
+        this.hud.showMathProblem(problem, { subtitle: label, rules: coinRules(grade) }, (result) => {
+            if (scored) return 0;
+            scored = true;
+            const delta = coinDelta(grade, result.correct, result.hintUsed);
             this.stats.asked++;
-            if (correct) {
-                this.stats.correct++;
-                this.coins += CORRECT_COINS;
-            } else {
-                this.coins = Math.max(0, this.coins - WRONG_COINS);
-            }
+            if (result.correct) this.stats.correct++;
+            if (result.hintUsed) this.stats.hints++;
+            this.coins = Math.max(0, this.coins + delta);
             this.persistCoins();
+            return delta;
         }, () => {
             this.inMathStop = false;
             this.refreshPause();
@@ -246,7 +204,7 @@ export default class RaceScene extends Phaser.Scene {
         this.refreshPause();
 
         const position = this.finishOrder.length + 1;
-        const prize = PRIZES[position - 1] || 5;
+        const prize = this.track.prizes[position - 1] || 5;
         this.coins += prize;
         this.persistCoins();
 

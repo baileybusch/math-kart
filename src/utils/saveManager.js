@@ -1,3 +1,6 @@
+import { isGrade, DEFAULT_GRADE } from '../math/grades.js';
+import { isCourse } from '../game/courses.js';
+
 const SAVE_KEY = 'mathKartSave';
 
 const DEFAULT_SAVE = {
@@ -8,7 +11,8 @@ const DEFAULT_SAVE = {
     speedUpgrades: 0,
     handlingUpgrades: 0,
     difficulty: 1,
-    lastCourse: 'forest'
+    lastCourse: 'forest',
+    grade: DEFAULT_GRADE
 };
 
 // iOS 12 Safari throws on localStorage.setItem in Private Browsing, so keep an
@@ -52,7 +56,7 @@ function sanitize(raw) {
     data.difficulty = toCount(raw.difficulty, 5) || 1;
 
     if (Array.isArray(raw.unlockedCourses)) {
-        data.unlockedCourses = raw.unlockedCourses.filter((c) => typeof c === 'string');
+        data.unlockedCourses = raw.unlockedCourses.filter((c, i, all) => isCourse(c) && all.indexOf(c) === i);
     }
     if (data.unlockedCourses.indexOf('forest') === -1) data.unlockedCourses.unshift('forest');
 
@@ -67,6 +71,8 @@ function sanitize(raw) {
     if (typeof raw.lastCourse === 'string' && data.unlockedCourses.indexOf(raw.lastCourse) !== -1) {
         data.lastCourse = raw.lastCourse;
     }
+    const grade = Number(raw.grade);
+    if (isGrade(grade)) data.grade = grade;
     return data;
 }
 
