@@ -6,8 +6,11 @@
  * check-legacy-bundle.mjs. This script covers runtime behaviour:
  *   - "iPad mini / iOS 12" profile: iPad iOS 12 user agent, 1024x768 touch
  *     screen, WebGL disabled and post-iOS-12 APIs deleted. Boots on Canvas,
- *     taps START RACE, drives with two fingers, answers a math stop and
- *     finishes the race.
+ *     taps START RACE, drives with two fingers, answers a Grade 3 math stop
+ *     and finishes the race. Then picks Grade 7 (survives a reload), and
+ *     plays Similar Figures stops: hint + typed right answer (half coins),
+ *     typed wrong answer with no hint (big penalty) and a YES/NO question.
+ *   - Private browsing (localStorage.setItem throws): grade select still works.
  *   - Phone landscape: whole game is visible (it used to be cut off).
  *   - Desktop: boots normally.
  *   - Broken or missing bundle: the "couldn't start" banner appears.
@@ -122,6 +125,61 @@ const activeScenes = (page) => page.evaluate(() =>
 
 const race = (page, fn) => page.evaluate(fn);
 
+const MENU = { start: [512, 610], shop: [512, 714], grade3: [362, 222], grade7: [662, 222] };
+const COINS = { right: 6, rightWithHint: 3, wrongWithHint: 4, wrong: 8 };
+
+const mathUi = (page) => page.evaluate(() => {
+    const u = window.mathKart.game.scene.getScene('RaceHudScene').mathUi;
+    return u && {
+        input: u.problem.input, kind: u.problem.kind || u.problem.pack, grade: u.problem.grade,
+        answer: u.problem.answer, answerValue: u.problem.answerValue, answerText: u.problem.answerText,
+        hintText: u.problem.hint, hasDiagram: !!u.problem.diagram,
+        hintUsed: u.hintUsed, answered: u.answered, typed: u.typed, result: u.result, message: u.message,
+        keys: u.keys, check: u.check, hint: u.hint, cont: u.cont, choices: u.choices
+    };
+});
+
+const raceState = (page) => race(page, () => {
+    const r = window.mathKart.game.scene.getScene('RaceScene');
+    return { coins: r.coins, asked: r.stats.asked, correct: r.stats.correct, hints: r.stats.hints, grade: r.grade };
+});
+
+// Ask for a specific problem type at the next star, then drive onto it.
+async function openMathStop(page, force) {
+    await page.evaluate((force) => {
+        window.__mathKartForce = force;
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        const cp = r.track.checkpoints[r.cpInLap];
+        r.player.x = cp.x; r.player.y = cp.y;
+    }, force);
+    await page.waitForFunction(() => {
+        const hud = window.mathKart.game.scene.getScene('RaceHudScene');
+        return hud.modalOpen === true && hud.mathUi && !hud.mathUi.closed;
+    }, null, { timeout: 5000 });
+    await page.waitForTimeout(350);
+    return mathUi(page);
+}
+
+async function typeOnKeypad(page, ui, text) {
+    for (const ch of text) {
+        const key = ui.keys[ch];
+        if (!key) throw new Error('no keypad key for ' + JSON.stringify(ch));
+        await tapGame(page, key.x, key.y);
+        await page.waitForTimeout(40);
+    }
+}
+
+async function closeMathStop(page) {
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').mathUi.contReady === true, null, { timeout: 3000 });
+    const ui = await mathUi(page);
+    await tapGame(page, ui.cont.x, ui.cont.y);
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === false, null, { timeout: 3000 });
+}
+
+function typedAnswer(value) {
+    return String(Math.round(value * 100) / 100);
+}
+
 async function ipadIos12(browser, baseUrl) {
     console.log('\n[iPad mini / iOS 12 profile]');
     const context = await browser.newContext({
@@ -147,7 +205,8 @@ async function ipadIos12(browser, baseUrl) {
     await page.waitForTimeout(400);
     await shot(page, 'ipad-01-menu');
 
-    await tapGame(page, 512, 568);
+    check(await page.evaluate(() => window.mathKart.game.scene.getScene('MenuScene').grade) === 3, 'Grade 3 is the default');
+    await tapGame(page, MENU.start[0], MENU.start[1]);
     await page.waitForFunction(() => {
         const hud = window.mathKart.game.scene.getScene('RaceHudScene');
         return hud && hud.sys.isActive() && hud.race && hud.race.raceStarted;
@@ -202,32 +261,25 @@ async function ipadIos12(browser, baseUrl) {
     }, null, { timeout: 3000 });
     check(true, '"Keep Racing" resumes');
 
-    // Jump to the first star to trigger a math stop.
-    await race(page, () => {
-        const r = window.mathKart.game.scene.getScene('RaceScene');
-        const cp = r.track.checkpoints[0];
-        r.player.x = cp.x; r.player.y = cp.y;
-    });
-    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === true, null, { timeout: 5000 });
-    check(true, 'math stop opened at star 1');
-    await page.waitForTimeout(350);
-    await shot(page, 'ipad-04-math-stop');
-
+    // Grade 3 multiple choice at star 1; tap two answers quickly.
     const coinsBefore = await race(page, () => window.mathKart.game.scene.getScene('RaceScene').coins);
-    await tapGame(page, 512 - 245, 454);
-    await page.waitForTimeout(300);
-    await tapGame(page, 512, 454);
+    const mc = await openMathStop(page, { input: 'choice' });
+    check(mc.grade === 3 && mc.input === 'choice' && mc.choices.length === 3, 'Grade 3 multiple-choice math stop opened at star 1');
+    await shot(page, 'ipad-04-math-stop');
+    await tapGame(page, mc.choices[0].x, mc.choices[0].y);
+    await page.waitForTimeout(250);
+    await tapGame(page, mc.choices[1].x, mc.choices[1].y);
     await page.waitForTimeout(300);
     await shot(page, 'ipad-05-answered');
-    const after = await race(page, () => {
-        const r = window.mathKart.game.scene.getScene('RaceScene');
-        return { coins: r.coins, asked: r.stats.asked, correct: r.stats.correct };
-    });
+    const after = await raceState(page);
+    const mcAfter = await mathUi(page);
     check(after.asked === 1, 'exactly one answer counted even after tapping twice (asked=' + after.asked + ')');
-    const expected = after.correct ? coinsBefore + 5 : Math.max(0, coinsBefore - 2);
+    const expected = after.correct ? coinsBefore + COINS.right : Math.max(0, coinsBefore - COINS.wrong);
     check(after.coins === expected, (after.correct ? 'right' : 'wrong') + ' answer scored correctly (' + coinsBefore + ' -> ' + after.coins + ')');
-    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === false, null, { timeout: 6000 });
-    check(true, 'math stop closed and racing resumed');
+    check(mcAfter.result.delta === (after.correct ? COINS.right : -COINS.wrong), 'coin change shown: ' + mcAfter.result.delta);
+    if (!after.correct) check(mcAfter.message.indexOf(mcAfter.answerText) !== -1, 'correct answer shown after a miss');
+    await closeMathStop(page);
+    check(true, '"Keep Racing" closed the math stop and racing resumed');
 
     // Fast-forward to the finish: mark every star done and cross the line.
     await race(page, () => {
@@ -265,7 +317,7 @@ async function ipadIos12(browser, baseUrl) {
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')));
     check(saved && saved.coins > 0, 'coins saved to localStorage (' + (saved && saved.coins) + ')');
 
-    await tapGame(page, 512, 690);
+    await tapGame(page, MENU.shop[0], MENU.shop[1]);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('ShopScene').sys.isActive(), null, { timeout: 5000 });
     await page.waitForTimeout(300);
     await tapGame(page, 524 + 90 + 140, 130 + 140);
@@ -275,6 +327,120 @@ async function ipadIos12(browser, baseUrl) {
     check(shopSave.currentColor === 'blue' && shopSave.coins === saved.coins - 20,
         'shop: bought and equipped blue paint (coins ' + saved.coins + ' -> ' + shopSave.coins + ')');
 
+    await grade7(page);
+
+    check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+    await context.close();
+}
+
+async function grade7(page) {
+    console.log('\n[iPad mini / iOS 12 profile: Grade 7 Similar Figures]');
+    await tapGame(page, 104, 56);
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('MenuScene').sys.isActive(), null, { timeout: 5000 });
+    await page.waitForTimeout(300);
+    await tapGame(page, MENU.grade7[0], MENU.grade7[1]);
+    await page.waitForTimeout(200);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')));
+    check(saved.grade === 7, 'tapping Grade 7 saves it (grade=' + saved.grade + ')');
+    await page.reload({ waitUntil: 'load' });
+    await waitForBoot(page);
+    check(await page.evaluate(() => window.mathKart.game.scene.getScene('MenuScene').grade) === 7, 'Grade 7 is still picked after a reload');
+    await page.waitForTimeout(300);
+    await shot(page, 'ipad-08-menu-grade7');
+
+    await tapGame(page, MENU.start[0], MENU.start[1]);
+    await page.waitForFunction(() => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return r && r.sys.isActive() && r.raceStarted && r.hud && r.hud.sys.isActive();
+    }, null, { timeout: 10000 });
+    await race(page, () => { window.mathKart.game.scene.getScene('RaceScene').coins = 40; });
+
+    // Star 1: find x, use the hint, type the right answer, double-tap CHECK.
+    let ui = await openMathStop(page, { kind: 'find-x' });
+    check(ui.grade === 7 && ui.input === 'number' && ui.hasDiagram, 'Grade 7 find-x stop uses the keypad and a diagram (' + ui.kind + ')');
+    await tapGame(page, ui.check.x, ui.check.y);
+    await page.waitForTimeout(150);
+    check(!(await mathUi(page)).answered, 'CHECK does nothing before anything is typed');
+    await tapGame(page, ui.hint.x, ui.hint.y);
+    await page.waitForTimeout(250);
+    ui = await mathUi(page);
+    check(ui.hintUsed && ui.message === ui.hintText, 'SHOW HINT reveals a step: "' + ui.message + '"');
+    check(ui.message.indexOf('x = ') === -1, 'hint does not give away x');
+    await shot(page, 'ipad-09-g7-hint');
+    const answer = typedAnswer(ui.answerValue);
+    await typeOnKeypad(page, ui, answer);
+    check((await mathUi(page)).typed === answer, 'keypad typed ' + answer + ' (answer ' + ui.answerText + ')');
+    await tapGame(page, ui.check.x, ui.check.y);
+    await page.waitForTimeout(60);
+    await tapGame(page, ui.check.x, ui.check.y);
+    await page.waitForTimeout(350);
+    await shot(page, 'ipad-10-g7-hint-right');
+    let st = await raceState(page);
+    ui = await mathUi(page);
+    check(await page.evaluate(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen) && !ui.closed,
+        'double-tapped CHECK keeps the feedback on screen (KEEP RACING ignores the 2nd tap)');
+    check(st.grade === 7 && st.asked === 1 && st.correct === 1 && st.hints === 1, 'right after hint counted once (' + JSON.stringify(st) + ')');
+    check(st.coins === 40 + COINS.rightWithHint && ui.result.delta === COINS.rightWithHint,
+        'hint then right = +' + COINS.rightWithHint + ' (half coins): 40 -> ' + st.coins);
+    await closeMathStop(page);
+
+    // Star 2: find x, no hint, wrong answer.
+    ui = await openMathStop(page, { kind: 'find-x' });
+    const wrong = typedAnswer(ui.answerValue + 1);
+    await typeOnKeypad(page, ui, wrong);
+    await tapGame(page, ui.check.x, ui.check.y);
+    await page.waitForTimeout(350);
+    await shot(page, 'ipad-11-g7-wrong-no-hint');
+    const before = st.coins;
+    st = await raceState(page);
+    ui = await mathUi(page);
+    check(st.asked === 2 && st.correct === 1 && st.hints === 1, 'wrong answer counted (' + JSON.stringify(st) + ')');
+    check(st.coins === before - COINS.wrong && ui.result.delta === -COINS.wrong,
+        'wrong with no hint = -' + COINS.wrong + ': ' + before + ' -> ' + st.coins);
+    check(ui.message.indexOf(ui.answerText) !== -1, 'miss shows the right answer: "' + ui.message.replace(/\n/g, ' / ') + '"');
+    await closeMathStop(page);
+
+    // Star 3: YES / NO similarity, tap the right answer twice.
+    ui = await openMathStop(page, { kind: 'similar-yesno' });
+    check(ui.input === 'choice' && ui.choices.length === 2, 'similar-figures YES/NO is multiple choice');
+    const right = ui.choices.filter((c) => c.label === ui.answer)[0];
+    await tapGame(page, right.x, right.y);
+    await page.waitForTimeout(60);
+    await tapGame(page, right.x, right.y);
+    await page.waitForTimeout(350);
+    await shot(page, 'ipad-12-g7-yes-no');
+    const before3 = st.coins;
+    st = await raceState(page);
+    check(st.asked === 3 && st.coins === before3 + COINS.right, 'YES/NO right = +' + COINS.right + ' once: ' + before3 + ' -> ' + st.coins);
+    await closeMathStop(page);
+
+    const g7Save = await page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')));
+    check(g7Save.coins === st.coins && g7Save.grade === 7, 'coins and grade saved (' + g7Save.coins + ', grade ' + g7Save.grade + ')');
+}
+
+async function privateBrowsing(browser, baseUrl) {
+    console.log('\n[Private browsing: localStorage.setItem throws]');
+    const context = await browser.newContext({ viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true, userAgent: IPAD_IOS12_UA });
+    await context.addInitScript(IOS12_SHIM);
+    await context.addInitScript(() => {
+        Storage.prototype.setItem = function () { throw new Error('QuotaExceededError'); };
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(baseUrl, { waitUntil: 'load' });
+    const boot = await waitForBoot(page);
+    check(boot.booted && !boot.error, 'game booted');
+    await page.waitForTimeout(300);
+    await tapGame(page, MENU.grade7[0], MENU.grade7[1]);
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => window.mathKart.game.scene.getScene('MenuScene').grade) === 7, 'Grade 7 picked without storage');
+    await tapGame(page, MENU.start[0], MENU.start[1]);
+    await page.waitForFunction(() => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return r && r.sys.isActive() && r.raceStarted;
+    }, null, { timeout: 10000 });
+    check(await race(page, () => window.mathKart.game.scene.getScene('RaceScene').grade) === 7, 'race uses Grade 7 from the in-memory save');
     check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
 }
@@ -291,7 +457,7 @@ async function phoneLandscape(browser, baseUrl) {
         'entire game canvas is on screen (' + [box.x, box.y, box.width, box.height].map(Math.round).join(',') + ')');
     await page.waitForTimeout(300);
     await shot(page, 'phone-01-menu');
-    await tapGame(page, 512, 568);
+    await tapGame(page, MENU.start[0], MENU.start[1]);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceScene').sys.isActive(), null, { timeout: 5000 });
     check(true, 'START RACE is reachable and works');
     await context.close();
@@ -343,6 +509,7 @@ async function main() {
     const browser = await chromium.launch({ executablePath, args: ['--no-sandbox'] });
     try {
         await ipadIos12(browser, baseUrl);
+        await privateBrowsing(browser, baseUrl);
         await phoneLandscape(browser, baseUrl);
         await desktop(browser, baseUrl);
         await brokenBundle(browser, baseUrl);
