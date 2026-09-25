@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
     <title>Math Kart - Race & Learn!</title>
     <style>
         * {
@@ -12,37 +13,311 @@
             padding: 0;
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
             position: fixed;
-            background: #1a1a2e;
+            background: #3fb4f0;
         }
         body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif;
+            font-family: "Arial Rounded MT Bold", "Chalkboard SE", "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
+            color: #1d2b53;
             touch-action: none;
+            -webkit-text-size-adjust: 100%;
         }
         #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
         }
         canvas {
             display: block;
-            max-width: 100%;
-            max-height: 100%;
+        }
+
+        .mk-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+        }
+        .mk-hidden {
+            display: none !important;
+        }
+
+        #mk-loading {
+            background: #3fb4f0;
+        }
+        .mk-loading-title {
+            font-size: 64px;
+            font-weight: bold;
+            color: #ffd43b;
+            text-shadow: 0 5px 0 #e8590c, 0 8px 12px rgba(0, 0, 0, 0.25);
+            letter-spacing: 2px;
+        }
+        .mk-loading-kart {
+            width: 90px;
+            height: 50px;
+            margin: 28px auto 18px;
+            border-radius: 14px;
+            background: #ff4757;
+            border: 5px solid #1d2b53;
+            -webkit-animation: mk-bounce 0.6s ease-in-out infinite alternate;
+            animation: mk-bounce 0.6s ease-in-out infinite alternate;
+        }
+        .mk-loading-text {
+            font-size: 30px;
+            color: #ffffff;
+            text-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+        }
+        @-webkit-keyframes mk-bounce {
+            from { -webkit-transform: translateY(0); }
+            to { -webkit-transform: translateY(-14px); }
+        }
+        @keyframes mk-bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-14px); }
+        }
+
+        #mk-error {
+            z-index: 20;
+            background: #2b2d6e;
+        }
+        .mk-card {
+            background: #ffffff;
+            border: 6px solid #1d2b53;
+            border-radius: 28px;
+            padding: 32px 36px;
+            max-width: 640px;
+            width: 100%;
+            box-shadow: 0 10px 0 #1d2b53;
+        }
+        .mk-card h1 {
+            font-size: 40px;
+            color: #e03131;
+            margin-bottom: 14px;
+        }
+        .mk-reason {
+            font-size: 26px;
+            line-height: 1.35;
+            margin-bottom: 22px;
+        }
+        .mk-button {
+            display: inline-block;
+            font-family: inherit;
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffffff;
+            background: #2fb344;
+            border: 5px solid #1d2b53;
+            border-radius: 22px;
+            padding: 16px 44px;
+            min-height: 76px;
+            box-shadow: 0 6px 0 #1d2b53;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+        .mk-button:active {
+            -webkit-transform: translateY(4px);
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #1d2b53;
+        }
+        .mk-help {
+            margin-top: 24px;
+            font-size: 18px;
+            line-height: 1.45;
+            color: #495057;
+            text-align: left;
+        }
+        .mk-detail {
+            margin-top: 14px;
+            font-family: Menlo, Courier, monospace;
+            font-size: 13px;
+            color: #868e96;
+            word-wrap: break-word;
+            text-align: left;
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
+        #mk-rotate {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            z-index: 5;
+            width: 300px;
+            margin-left: -150px;
+            padding: 10px 14px;
+            border-radius: 16px;
+            background: rgba(29, 43, 83, 0.88);
+            color: #ffffff;
+            font-size: 20px;
+            text-align: center;
+            pointer-events: none;
+        }
+        @media (orientation: portrait) and (max-aspect-ratio: 3/5) {
+            #mk-rotate { display: block; }
         }
     </style>
-  <script type="module" crossorigin src="/math-kart/assets/index-M7ZF89Ae.js"></script>
+    <script>
+    // Hand-written ES5 on purpose: this must run even when the game bundle
+    // can't, so the screen is never left blank.
+    (function () {
+        var booted = false;
+        var failed = false;
+        var slowTimer = null;
+        var deadTimer = null;
+
+        function el(id) { return document.getElementById(id); }
+
+        function hide(id) {
+            var node = el(id);
+            if (node && node.className.indexOf('mk-hidden') === -1) {
+                node.className += ' mk-hidden';
+            }
+        }
+
+        function show(id) {
+            var node = el(id);
+            if (node) {
+                node.className = node.className.replace(/\s*mk-hidden/g, '');
+            }
+        }
+
+        function setText(id, text) {
+            var node = el(id);
+            if (node) { node.textContent = text; }
+        }
+
+        function clearTimers() {
+            if (slowTimer) { clearTimeout(slowTimer); }
+            if (deadTimer) { clearTimeout(deadTimer); }
+        }
+
+        function fail(reason, detail) {
+            if (failed) { return; }
+            failed = true;
+            clearTimers();
+            window.__mathKartBootError = { reason: reason, detail: detail || '' };
+            function render() {
+                setText('mk-error-title', booted ? 'Math Kart hit a bump!' : 'Math Kart couldn\u2019t start');
+                setText('mk-error-reason', reason);
+                setText('mk-error-detail', detail ? 'Details for grown-ups: ' + detail : '');
+                hide('mk-loading');
+                show('mk-error');
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', render);
+            } else {
+                render();
+            }
+        }
+
+        function describe(value) {
+            if (!value) { return ''; }
+            if (value.message) { return String(value.message); }
+            return String(value);
+        }
+
+        window.MathKartBoot = {
+            ready: function () {
+                if (booted) { return; }
+                booted = true;
+                clearTimers();
+                window.__mathKartBooted = true;
+                hide('mk-loading');
+            },
+            fail: fail,
+            status: function (text) { setText('mk-loading-text', text); },
+            isBooted: function () { return booted; }
+        };
+
+        window.addEventListener('error', function (event) {
+            var target = event && event.target;
+            if (target && target !== window && target.tagName) {
+                if (target.tagName === 'SCRIPT') {
+                    fail('Part of the game didn\u2019t download. Check the Wi-Fi, then tap Try Again.',
+                        'Could not load ' + (target.src || target.getAttribute('data-src') || 'a script'));
+                }
+                return;
+            }
+            var msg = describe(event && (event.error || event.message));
+            var where = event && event.filename ? ' @ ' + event.filename + ':' + event.lineno : '';
+            if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(msg)) {
+                fail('This iPad\u2019s browser couldn\u2019t read the game code.', msg + where);
+            } else {
+                fail('Something went wrong while the game was running.', msg + where);
+            }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function (event) {
+            fail('Something went wrong while the game was loading.', describe(event && event.reason));
+        });
+
+        var probe = document.createElement('canvas');
+        if (!probe.getContext || !probe.getContext('2d')) {
+            fail('This browser can\u2019t draw games (no canvas support).', navigator.userAgent);
+            return;
+        }
+
+        slowTimer = setTimeout(function () {
+            window.MathKartBoot.status('Still loading\u2026 slow Wi-Fi? Hang on!');
+        }, 10000);
+        deadTimer = setTimeout(function () {
+            fail('The game took too long to start. Check the Wi-Fi, then tap Try Again.', 'Boot timeout (45s)');
+        }, 45000);
+    })();
+    </script>
+  
 </head>
 <body>
     <div id="game-container"></div>
+
+    <div id="mk-loading" class="mk-overlay">
+        <div>
+            <div class="mk-loading-title">MATH KART</div>
+            <div class="mk-loading-kart"></div>
+            <div id="mk-loading-text" class="mk-loading-text">Starting engines&hellip;</div>
+        </div>
+    </div>
+
+    <div id="mk-error" class="mk-overlay mk-hidden" role="alert">
+        <div class="mk-card">
+            <h1 id="mk-error-title">Math Kart couldn&rsquo;t start</h1>
+            <p id="mk-error-reason" class="mk-reason"></p>
+            <button type="button" class="mk-button" onclick="window.location.reload()">Try Again</button>
+            <p class="mk-help">
+                <b>Grown-ups:</b> if Try Again doesn&rsquo;t help, open
+                <b>Settings &rarr; Safari &rarr; Advanced &rarr; Website Data</b>,
+                delete <b>github.io</b>, then reopen the game.
+            </p>
+            <p id="mk-error-detail" class="mk-detail"></p>
+        </div>
+    </div>
+
+    <div id="mk-rotate">Turn your device sideways for a bigger track!</div>
+
+  <script crossorigin id="vite-legacy-polyfill" src="/math-kart/assets/polyfills-legacy-9JSTWuAV.js"></script>
+  <script crossorigin id="vite-legacy-entry" data-src="/math-kart/assets/index-legacy-CIBFJ4C9.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
 </body>
 </html>
