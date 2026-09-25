@@ -167,7 +167,6 @@ export function showReview(scene, stops, opts, onDone) {
         if (state.closed || isWhiteboardOpen()) return;
         if (event.key === 'ArrowRight' || event.key === 'Enter') next();
         else if (event.key === 'ArrowLeft') go(state.index - 1);
-        else if (event.key === 'Escape') finish(false);
     };
     if (keyboard) keyboard.on('keydown', onKey);
 

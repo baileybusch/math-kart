@@ -290,11 +290,11 @@ export default class RaceHudScene extends Phaser.Scene {
         const headline = result.position === 1 ? 'You WON!' : 'You finished ' + ordinal(result.position) + '!';
         panel.add(addTitle(this, 0, -130, headline, 60));
 
-        panel.add(this.add.text(0, -62, '+' + result.prize + ' prize coins', textStyle(34, '#e67700')).setOrigin(0.5));
+        panel.add(this.add.text(0, -68, '+' + result.prize + ' prize coins', textStyle(34, '#e67700')).setOrigin(0.5));
         const hints = result.stats.hints;
         const mathLine = 'Math: ' + result.stats.correct + ' of ' + result.stats.asked + ' right' +
             (hints ? '  (' + hints + (hints === 1 ? ' hint)' : ' hints)') : '');
-        panel.add(this.add.text(0, -16, mathLine, textStyle(30, INK)).setOrigin(0.5));
+        panel.add(this.add.text(0, -24, mathLine, textStyle(30, INK)).setOrigin(0.5));
 
         const mistakes = race.mistakes();
         const bonus = race.reviewBonusOnOffer();
