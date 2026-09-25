@@ -27,3 +27,6 @@ Thumbs.db
 
 # Smoke test output
 smoke-screenshots/
+
+# Track layout preview (npm run tracks:preview)
+track-preview/

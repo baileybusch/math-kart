@@ -10,7 +10,8 @@
     "check:legacy": "node scripts/check-legacy-bundle.mjs",
     "test:unit": "node scripts/unit-test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
-    "test": "npm run test:unit && npm run build && npm run check:legacy && npm run test:smoke"
+    "test": "npm run test:unit && npm run build && npm run check:legacy && npm run test:smoke",
+    "tracks:preview": "node scripts/track-preview.mjs"
   },
   "dependencies": {
     "phaser": "^3.80.1"

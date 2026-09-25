@@ -1,5 +1,5 @@
-// Coin rules for Math Stops. Documented in NOTES.md ("Coins, hints and
-// penalties") - keep the two in sync.
+// Coin rules for Math Stops and the mistake review. Documented in NOTES.md
+// ("Coins, hints and penalties", "Review mistakes") - keep them in sync.
 //
 //   right, no hint   +N
 //   right, with hint +ceil(N/2)
@@ -21,6 +21,18 @@ export function coinDelta(grade, correct, hintUsed) {
     const r = coinRules(grade);
     if (correct) return hintUsed ? r.hintRight : r.right;
     return hintUsed ? r.hintWrong : r.wrong;
+}
+
+// Reviewing mistakes after a finished race pays ceil(N/2) per mistake (the
+// same as a right answer with a hint): +3 each in Grade 3, +5 in Grade 7.
+// A miss (-N) plus its review (+N/2) is still a loss, so missing on purpose
+// never pays, and a perfect race always earns the most.
+export function reviewBonusPerMistake(grade) {
+    return Math.ceil(baseReward(grade) / 2);
+}
+
+export function reviewBonus(grade, mistakes) {
+    return Math.max(0, mistakes) * reviewBonusPerMistake(grade);
 }
 
 export function signed(n) {

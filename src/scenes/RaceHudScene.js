@@ -5,11 +5,14 @@ import {
 } from '../ui/theme.js';
 import { LAPS } from './RaceScene.js';
 import { showMathStop } from '../ui/mathStop.js';
+import { showReview } from '../ui/reviewMistakes.js';
 import { closeWhiteboard } from '../ui/whiteboard.js';
 
 const W = GAME_WIDTH;
 const H = GAME_HEIGHT;
 const MEDAL_COLORS = [0xffd43b, 0xdee2e6, 0xe8a060];
+// Results card centre and button offsets (the smoke test taps these).
+export const RESULTS = { x: W / 2, y: H / 2 + 10, reviewDy: 42, buttonsDy: 226 };
 
 /**
  * Everything drawn on top of the race: HUD, touch pedals, countdown, math
@@ -192,6 +195,13 @@ export default class RaceHudScene extends Phaser.Scene {
         this.tweens.add({ targets: text, alpha: 0, delay: 1100, duration: 400, onComplete: () => text.destroy() });
     }
 
+    flashTip(message) {
+        const t = this.add.text(W / 2, 128, message, textStyle(30, '#ffffff', {
+            stroke: INK, strokeThickness: 7
+        })).setOrigin(0.5).setDepth(50);
+        this.tweens.add({ targets: t, alpha: 0, delay: 2400, duration: 500, onComplete: () => t.destroy() });
+    }
+
     // -------------------------------------------------------------- modals
 
     openModal(depth) {
@@ -255,43 +265,96 @@ export default class RaceHudScene extends Phaser.Scene {
     }
 
     showResults(result) {
-        const layer = this.openModal(300);
-        const panel = this.add.container(W / 2, H / 2 + 10);
+        this.results = result;
+        this.resultsLayer = this.openModal(300);
+        this.renderResults(true);
+    }
+
+    renderResults(animate) {
+        const result = this.results;
+        const race = this.race;
+        const layer = this.resultsLayer;
+        if (this.resultsPanel) this.resultsPanel.destroy();
+        const panel = this.add.container(RESULTS.x, RESULTS.y);
+        this.resultsPanel = panel;
         layer.add(panel);
 
         const g = this.add.graphics();
-        drawPanel(g, -400, -300, 800, 580, COLORS.white, 36);
+        drawPanel(g, -400, -312, 800, 600, COLORS.white, 36);
         panel.add(g);
 
         const medal = MEDAL_COLORS[result.position - 1] || COLORS.skyLight;
-        panel.add(this.add.star(0, -215, 5, 38, 78, medal).setStrokeStyle(6, COLORS.ink));
-        panel.add(this.add.text(0, -210, String(result.position), textStyle(44, INK)).setOrigin(0.5));
+        panel.add(this.add.star(0, -232, 5, 36, 74, medal).setStrokeStyle(6, COLORS.ink));
+        panel.add(this.add.text(0, -227, String(result.position), textStyle(42, INK)).setOrigin(0.5));
 
         const headline = result.position === 1 ? 'You WON!' : 'You finished ' + ordinal(result.position) + '!';
-        panel.add(addTitle(this, 0, -100, headline, 64));
+        panel.add(addTitle(this, 0, -130, headline, 60));
 
-        panel.add(this.add.text(0, -20, '+' + result.prize + ' prize coins', textStyle(36, '#e67700')).setOrigin(0.5));
+        panel.add(this.add.text(0, -68, '+' + result.prize + ' prize coins', textStyle(34, '#e67700')).setOrigin(0.5));
         const hints = result.stats.hints;
         const mathLine = 'Math: ' + result.stats.correct + ' of ' + result.stats.asked + ' right' +
             (hints ? '  (' + hints + (hints === 1 ? ' hint)' : ' hints)') : '');
-        panel.add(this.add.text(0, 30, mathLine, textStyle(32, INK)).setOrigin(0.5));
-        panel.add(this.add.text(0, 76, 'Total coins: ' + result.coins, textStyle(28, '#495057')).setOrigin(0.5));
+        panel.add(this.add.text(0, -24, mathLine, textStyle(30, INK)).setOrigin(0.5));
 
-        panel.add(createButton(this, -250, 185, {
-            width: 220, height: 100, label: 'Race Again', fontSize: 32, color: COLORS.green,
+        const mistakes = race.mistakes();
+        const bonus = race.reviewBonusOnOffer();
+        if (race.reviewClaimed) {
+            panel.add(this.add.text(0, 50, '+' + race.reviewClaimed + ' for reviewing mistakes \u2713', textStyle(32, '#2b8a3e')).setOrigin(0.5));
+            panel.add(this.add.text(0, 92, 'Nice work checking your answers!', textStyle(20, '#868e96')).setOrigin(0.5));
+        } else if (mistakes.length) {
+            const n = mistakes.length;
+            panel.add(createButton(this, 0, RESULTS.reviewDy, {
+                width: 560, height: 82, radius: 28, fontSize: 32, color: COLORS.orange,
+                label: 'Review ' + n + (n === 1 ? ' mistake' : ' mistakes') + '  +' + bonus + ' \u25B6',
+                onTap: () => this.openReview('mistakes')
+            }));
+            panel.add(this.add.text(0, 108, 'See the right answers and earn +' + bonus + ' coins', textStyle(19, '#868e96')).setOrigin(0.5));
+        } else if (race.stopLog.length) {
+            panel.add(this.add.text(0, 36, 'Perfect \u2014 nothing to review! \u2605', textStyle(32, '#2b8a3e')).setOrigin(0.5));
+            panel.add(createButton(this, 0, 94, {
+                width: 420, height: 60, radius: 22, fontSize: 24, color: COLORS.blue,
+                label: race.stopLog.length === 1 ? 'Look back at the question' : 'Look back at all ' + race.stopLog.length + ' questions',
+                onTap: () => this.openReview('all')
+            }));
+        }
+        panel.add(this.add.text(0, 152, 'Total coins: ' + race.coins, textStyle(28, '#495057')).setOrigin(0.5));
+
+        panel.add(createButton(this, -250, RESULTS.buttonsDy, {
+            width: 220, height: 92, label: 'Race Again', fontSize: 32, color: COLORS.green,
             onTap: () => this.leaveTo('RaceScene', { course: result.course })
         }));
-        panel.add(createButton(this, 0, 185, {
-            width: 220, height: 100, label: 'Shop', fontSize: 36, color: COLORS.purple,
+        panel.add(createButton(this, 0, RESULTS.buttonsDy, {
+            width: 220, height: 92, label: 'Shop', fontSize: 36, color: COLORS.purple,
             onTap: () => this.leaveTo('ShopScene')
         }));
-        panel.add(createButton(this, 250, 185, {
-            width: 220, height: 100, label: 'Menu', fontSize: 36, color: COLORS.blue,
+        panel.add(createButton(this, 250, RESULTS.buttonsDy, {
+            width: 220, height: 92, label: 'Menu', fontSize: 36, color: COLORS.blue,
             onTap: () => this.leaveTo('MenuScene')
         }));
 
-        panel.setScale(0.7);
-        this.tweens.add({ targets: panel, scale: 1, duration: 300, ease: 'Back.easeOut' });
+        if (animate) {
+            panel.setScale(0.7);
+            this.tweens.add({ targets: panel, scale: 1, duration: 300, ease: 'Back.easeOut' });
+        }
+    }
+
+    openReview(mode) {
+        if (this.review && !this.review.closed) return;
+        const race = this.race;
+        const stops = mode === 'mistakes' ? race.mistakes() : race.stopLog.slice();
+        if (!stops.length) return;
+        const bonus = mode === 'mistakes' ? race.reviewBonusOnOffer() : 0;
+        showReview(this, stops, { mode, bonus }, (completed) => {
+            if (completed && mode === 'mistakes') {
+                const paid = race.claimReviewBonus();
+                if (paid) {
+                    this.renderResults(false);
+                    this.flashMessage('+' + paid + ' coins!');
+                    return;
+                }
+            }
+            this.renderResults(false);
+        });
     }
 
     leaveTo(key, data) {
