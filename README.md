@@ -13,7 +13,7 @@ A kart racing game that teaches math through fun gameplay! Pick your grade (Grad
 > if anything goes wrong. It works on new phones, tablets and desktops too.
 
 **Getting the latest version on the iPad:** open
-`https://baileybusch.github.io/math-kart/?v=4` (any new number). If it still
+`https://baileybusch.github.io/math-kart/?v=5` (any new number). If it still
 looks old, go to Settings → Safari → Advanced → Website Data, delete
 "github.io", and reopen. See [QUICKSTART.md](QUICKSTART.md) for more.
 
@@ -38,7 +38,15 @@ Then open the URL shown (usually `http://localhost:5173/math-kart/`).
 ### Gameplay
 1. **Menu**: pick your **grade** (Grade 3 or Grade 7, remembered for next
    time), pick a track card (locked ones show their price), tap **START RACE**
-2. **Race**: 2 laps. Follow the yellow arrow to the yellow ⭐ stars (3 per lap)
+2. **Race**: 2 laps. Follow the yellow arrow to the yellow ⭐ stars (3 per lap).
+   Watch out for track features:
+   - **Jump ramps** (orange with yellow chevrons) and **bumps** (sand dunes,
+     logs, snow moguls): drive over them to hop into the air with a short
+     speed boost. In the air you steer at half strength and the kart gently
+     lines up with the road, so landings are easy
+   - **Rivers**: the blue water across the road slows you to 40% of top
+     speed. A white-arrowed side road with a yellow **BRIDGE** sign crosses
+     the river on a wooden bridge at full speed
 3. **Math Stop** at each star: everyone pauses while you answer
    - About half the questions need a **typed answer** on the big number
      keypad (with `.`, a `/` fraction key for Grade 7, and ⌫); the rest are
@@ -61,17 +69,27 @@ Then open the URL shown (usually `http://localhost:5173/math-kart/`).
    A wrong guess without a hint is the worst outcome on purpose; see
    [NOTES.md](NOTES.md#coins-hints-and-penalties) for why.
 5. **Finish**: cross the checkered line after lap 2. Prizes depend on the
-   track (harder tracks pay more, and the other karts are a bit faster):
+   track (harder tracks pay more, and the other karts are a bit faster).
+   Every track has its own shape, length and features:
 
-   | Track | Unlock | Needs | 🥇 1st | 🥈 2nd | 🥉 3rd |
-   |-------|-------:|-------|------:|------:|------:|
-   | Meadow Loop (grassy starter) | free | - | 50 | 30 | 15 |
-   | Desert Canyon (sand, cactus) | 100 | Meadow | 60 | 35 | 20 |
-   | Pine Path (dark woods, S-bend) | 250 | Desert | 70 | 40 | 20 |
-   | Snow Circuit (frozen lake) | 450 | Pine | 80 | 45 | 25 |
-   | Night City (lights, sharp corners) | 700 | Snow | 90 | 50 | 30 |
+   | Track | Shape and length | Features | Unlock | Needs | 🥇 1st | 🥈 2nd | 🥉 3rd |
+   |-------|------------------|----------|-------:|-------|------:|------:|------:|
+   | Meadow Loop | wide, sweeping kidney, medium | creek + bridge | free | - | 50 | 30 | 15 |
+   | Desert Canyon | long serpentine, longest | 2 jump ramps, 2 dunes | 100 | Meadow | 60 | 35 | 20 |
+   | Pine Path | tight and twisty, long | river + bridge, 2 logs | 250 | Desert | 70 | 40 | 20 |
+   | Snow Circuit | figure 8 (crosses itself) | 4 snow moguls | 450 | Pine | 80 | 45 | 25 |
+   | Night City | short and blocky | 2 jump ramps | 700 | Snow | 90 | 50 | 30 |
 
-6. **Shop**: spend coins on
+6. **Review mistakes**: the results card lists how many Math Stops you
+   missed. Tap **Review N mistakes** to step through each one: the question
+   (and diagram), your answer, the right answer and how to solve it, with
+   the whiteboard if you want it. Finish the review to earn **+3 coins per
+   mistake (Grade 3) or +5 (Grade 7)**, once per finished race; the card
+   then says "+N for reviewing mistakes". A perfect race says "Perfect —
+   nothing to review!" and lets you look back at the questions (no bonus).
+   See [NOTES.md](NOTES.md#review-mistakes-v5) for why these numbers.
+
+7. **Shop**: spend coins on
    - Speed upgrades (30 coins each, max 5 levels)
    - Steering upgrades (30 coins each, max 5 levels)
    - The **Track Ladder**: unlock tracks in order (100 → 250 → 450 → 700)
@@ -84,6 +102,10 @@ Then open the URL shown (usually `http://localhost:5173/math-kart/`).
   (on a computer you can also type digits, `.`, `/`, Backspace and Enter;
   keys 1-3 pick an answer button)
 - **Whiteboard**: draw with a finger or the mouse; **Done** (or Esc) closes it
+- **Review mistakes**: **Next ▶** / **◀ Back** / **Close** (on a computer:
+  → or Enter, and ←). Next unlocks after about a second on each new card
+- **Jumps and water**: nothing extra to press. Hold GO over ramps; steer
+  onto the bridge road to skip the slow water
 
 ## 🧮 Math Content
 
@@ -126,7 +148,8 @@ better (6.7, 6.67, 6.666) or the exact fraction `20/3`. Answers that end
 ```bash
 npm install            # install dependencies (node_modules is git-ignored)
 npm run dev            # dev server
-npm run test:unit      # generated problems, coin rules, autopilot laps of every track
+npm run test:unit      # generated problems, coin rules, track geometry, hazards, autopilot + AI laps
+npm run tracks:preview # draw every track layout to track-preview/tracks.png
 npm run build          # production build -> dist/
 npm run preview        # serve dist/ locally
 npm run check:legacy   # assert dist/ JS is safe for iOS 12 Safari
@@ -201,7 +224,8 @@ math-kart/
 ├── index.html                  # Page shell + ES5 boot watchdog / error card
 ├── vite.config.js              # Legacy (iOS 12) build config
 ├── scripts/
-│   ├── unit-test.mjs           # Math generators, answers, coin rules
+│   ├── unit-test.mjs           # Math generators, answers, coins, tracks and hazards
+│   ├── track-preview.mjs       # Draws every track layout (npm run tracks:preview)
 │   ├── check-legacy-bundle.mjs # No ?. / ??, ES2017-only output check
 │   └── smoke-test.mjs          # Headless Chrome play-through (iPad iOS 12 profile)
 ├── src/
@@ -210,26 +234,28 @@ math-kart/
 │   ├── ui/
 │   │   ├── theme.js            # Fonts, colors, buttons, kart drawing
 │   │   ├── mathStop.js         # Math Stop: keypad/choices, hint, coins
+│   │   ├── reviewMistakes.js   # After-race review of missed Math Stops
 │   │   ├── figureDiagram.js    # Shape diagrams for Grade 7
 │   │   ├── coursePreview.js    # Track mini-maps for menu and shop cards
 │   │   └── whiteboard.js       # Full-screen scratch pad (DOM canvas)
 │   ├── scenes/
 │   │   ├── MenuScene.js        # Grade picker, track cards, START RACE, SHOP
 │   │   ├── RaceScene.js        # Driving, laps, checkpoints, AI
-│   │   ├── RaceHudScene.js     # HUD, touch pedals, pause, results
+│   │   ├── RaceHudScene.js     # HUD, touch pedals, pause, results + review
 │   │   └── ShopScene.js        # Upgrades, paint, track ladder
 │   ├── game/
 │   │   ├── courses.js          # 5 track layouts, prices, prizes, unlock ladder
-│   │   ├── raceLogic.js        # Kart driving, laps, checkpoints (shared with tests)
-│   │   ├── trackBuilder.js     # Track drawing and themed decorations
-│   │   ├── trackMath.js        # Loop geometry (progress, nearest point)
+│   │   ├── features.js         # Ramps, bumps, river, bridge road (shared with tests)
+│   │   ├── raceLogic.js        # Kart + AI driving, water, jumps, laps (shared with tests)
+│   │   ├── trackBuilder.js     # Track, river, bridge, ramp drawing and decorations
+│   │   ├── trackMath.js        # Loop geometry (rounded corners, progress, nearest point)
 │   │   └── AIKart.js           # Computer opponents
 │   ├── math/
 │   │   ├── grades.js           # Grade 3 / Grade 7 -> packs
 │   │   ├── mathPacks.js        # Grade 3 packs + pack registry
 │   │   ├── similarFigures.js   # Grade 7 Similar Figures pack
 │   │   ├── answers.js          # Typed-answer parsing and tolerance
-│   │   ├── economy.js          # Coin rules (hints, penalties)
+│   │   ├── economy.js          # Coin rules (hints, penalties, review bonus)
 │   │   └── random.js           # RNG helpers
 │   └── utils/
 │       └── saveManager.js      # localStorage (safe in private browsing)

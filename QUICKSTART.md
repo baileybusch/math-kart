@@ -46,7 +46,17 @@ If you want to run it on your computer instead:
    - Right, no hint: **+6** (Grade 3) / **+10** (Grade 7). With a hint: +3 / +5
    - Wrong after a hint: −3 / −5. **Wrong guess with no hint: −6 / −10** (the worst, so try a hint!)
 6. **Race 2 laps** (3 stars per lap) and cross the checkered line
-7. **Win prize coins** (1st place = 50!) and visit the **Shop**
+   - **Orange ramps** and **bumps** make your kart hop into the air with a
+     speed boost. Just hold GO; the kart lines itself back up with the road
+   - **Blue water across the road is slow!** Follow the white arrows and the
+     yellow **BRIDGE** sign to the wooden bridge instead
+7. **Win prize coins** (1st place = 50!)
+8. **Review your mistakes**: on the results card, tap **Review mistakes**
+   to see each question you missed, your answer, the right answer and how
+   to solve it. Finish the review for bonus coins: **+3 per mistake**
+   (Grade 3) or **+5** (Grade 7). No mistakes? You'll see "Perfect —
+   nothing to review!"
+9. Visit the **Shop**
 
 ---
 
@@ -68,7 +78,11 @@ If you want to run it on your computer instead:
 
 ## Tips for Fun
 
-- Stay on the road - grass slows you down!
+- Stay on the road - grass slows you down, and river water slows you even more!
+- Every track is different: Meadow has a creek with a bridge, Desert has
+  big jumps, Pine is twisty with a river and logs, Snow is a figure 8 with
+  snowy bumps, Night City is short with jumps
+- Reviewing your mistakes after a race earns bonus coins
 - Try to get 1st place for maximum coins
 - Save up to unlock the next track on the ladder (100, 250, 450, then 700 coins)
 - Buy Speed and Steering upgrades
@@ -99,7 +113,7 @@ If you want to run it on your computer instead:
 
 **Getting the newest version on the iPad (Safari has no "hard refresh")**
 1. Open the link with a new number on the end, e.g.
-   `https://baileybusch.github.io/math-kart/?v=4`
+   `https://baileybusch.github.io/math-kart/?v=5`
    (any number you haven't used before forces a fresh download).
 2. Still old or blank? **Settings → Safari → Advanced → Website Data →**
    search "github" → swipe left → **Delete**, then reopen the link.

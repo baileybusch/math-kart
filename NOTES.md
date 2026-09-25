@@ -53,8 +53,11 @@
   checks every one (answer accepted, wrong choices rejected, diagram numbers
   really similar with x filled in, hints don't state the answer, desks are
   longer than wide...), plus typed-answer parsing/tolerance, the coin table,
-  track geometry and an autopilot that must finish two laps of every track
-  (see "Reachable checkpoints" below).
+  the review bonus, track geometry, ramp/river/bridge placement and physics,
+  and autopilot and AI karts that must finish two laps of every track (see
+  "Reachable checkpoints" below).
+- `npm run tracks:preview`: draws every layout (road, river, bridge, ramps,
+  stars, lap fractions) to `track-preview/tracks.png` for editing tracks.
 - `npm run test:smoke`: serves `dist/` and drives headless Chrome with an
   "iPad iOS 12" profile (iPad iOS 12 UA, 1024x768 touch, WebGL disabled,
   `ResizeObserver`/`PointerEvent`/`structuredClone`/etc. deleted). It checks
@@ -62,9 +65,13 @@
   Math Stop (one answer only after a double tap), a typed Grade 7 answer, the
   whiteboard (two-finger drawing that never reaches the pedals, then Done back
   to the same question with the typed digits kept), a hint (+5 instead of
-  +10), a wrong answer with no hint (−10, correct answer shown), finishing,
-  Race Again, Quit, a shop purchase and the track ladder, plus one race on
-  every track. Desktop checks WebGL boot, then (on
+  +10), a wrong answer with no hint (−10, correct answer shown), no review
+  bonus mid-race, finishing, the mistake review (Next locked for a moment,
+  each card shows your answer and the right one, whiteboard, +5 per mistake
+  paid once and saved), Race Again (empty review log), Quit, a shop
+  purchase and the track ladder, plus one race on every track: the ford
+  slows the kart to 40%, the bridge doesn't, a ramp launches it, and a
+  perfect race says "nothing to review". Desktop checks WebGL boot, then (on
   Canvas, because CI has no GPU and software WebGL takes 10+ s to start a
   race) Grade 3 persistence, a keyboard-typed answer (+6) and drawing with
   the mouse. It also checks that
@@ -76,8 +83,8 @@
 ### Manual checklist: iPad mini (iOS 12)
 Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 
-1. [ ] Open `https://baileybusch.github.io/math-kart/?v=4` in Safari (use a
-       new number after each later deploy: `?v=5`, `?v=6`, ...).
+1. [ ] Open `https://baileybusch.github.io/math-kart/?v=5` in Safari (use a
+       new number after each later deploy: `?v=6`, `?v=7`, ...).
 2. [ ] Within a few seconds you see the blue "MATH KART / Starting engines…"
        screen, then the menu. Never a dark blank page.
 3. [ ] If instead you see "Math Kart couldn't start", note the grey details
@@ -92,6 +99,17 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 6. [ ] Hold GO with the right thumb and steer with the left thumb at the
        same time. The kart moves and turns smoothly (no big stutter).
 7. [ ] Drive off the road: the kart slows down on the grass.
+7a. [ ] Meadow Loop: on the long bottom straight, drive straight through the
+        blue ford. Splashes appear, the kart slows right down and "Splash!
+        Water is slow. Try the bridge!" shows once. Next lap follow the
+        white arrows and the yellow BRIDGE sign onto the side road and over
+        the wooden bridge: no slow-down. The water and bridge are easy to
+        tell apart on the iPad mini screen.
+7b. [ ] Desert Canyon or Night City: drive over an orange jump ramp while
+        holding GO. The kart grows (it's in the air) with a shadow under it,
+        "WHOOSH!" pops up, and it lands on the road without a crash, a bit
+        faster than before. Bumps (dunes, logs, snow moguls) give a small
+        "Boing!" hop.
 8. [ ] Follow the yellow arrow to star 1. The Math Stop appears with a
        Grade 7 question and (usually) two shapes with labeled sides. The
        question and labels are readable without zooming.
@@ -115,6 +133,18 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 11. [ ] Finish a 2-lap race. The results card shows place, prize and
         "Math: X of 6 right" (plus hints used). Race Again, Shop and Menu all
         work.
+11a. [ ] Finish a race with at least one wrong answer. The results card
+         shows "Review N mistakes +B". Tap it: each card shows the question
+         (and shapes), your answer in red, the right answer in green and how
+         to solve it. Next is grey for about a second on each new card.
+         Whiteboard opens and Done returns to the same card. On the last
+         card tap "Done ✓ +B": the results say "+B for reviewing mistakes ✓"
+         and the coin total went up by B (+3 per mistake in Grade 3, +5 in
+         Grade 7). The review button doesn't come back.
+11b. [ ] Finish a race with every answer right: "Perfect — nothing to
+         review!" and a "Look back" button (no bonus).
+11c. [ ] Quit a race from the pause menu after a wrong answer: no review,
+         no bonus.
 12. [ ] Shop: buy a paint color (if you have 20+ coins). The toast shows, coins
         go down, and the new color is used in the next race.
 12a. [ ] Shop → Track Ladder: with 100+ coins unlock Desert Canyon; Pine Path
@@ -123,7 +153,9 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
          1st-place prize matches the card (60 for Desert).
 12b. [ ] Optional (to see every track): unlock them all, then race Pine
          Path, Snow Circuit and Night City once each. Stars and the finish
-         line are reachable and each track looks clearly different.
+         line are reachable and each track looks and drives differently
+         (Pine is twisty, Snow crosses itself in the middle, City is short).
+         The menu mini-maps match the roads, rivers and ramps you drive.
 13. [ ] Close Safari fully (swipe it away), reopen the link: coins and
         purchases are still there.
 14. [ ] Rotate to portrait: the game shrinks to fit and still works.
@@ -246,70 +278,176 @@ Before this change it was +5 / −2 for everything.
   rotation/resize) until the next question, which starts with a clean pad.
   Nothing on the pad is graded.
 
-## Track unlock ladder (v4)
+## Review mistakes (v5)
 
-Five tracks, each with its own palette, layout and decorations. Data lives
-in `src/game/courses.js` (no Phaser); art in `src/game/trackBuilder.js`.
+After a **finished** race the results card offers a review of every Math
+Stop the player got wrong in that race.
 
-| # | Track (id) | Look | Unlock | Needs | Prizes 1st/2nd/3rd | Opponents |
-|---|------------|------|------:|-------|--------------------|-----------|
-| 1 | Meadow Loop (`forest`) | green grass, flowers, round trees | free | - | 50 / 30 / 15 | 100% |
-| 2 | Desert Canyon (`desert`) | sand, rocks, cactus | 100 | Meadow | 60 / 35 / 20 | 104% |
-| 3 | Pine Path (`pine`) | dark woods, pines, logs, mushrooms, big S-bend | 250 | Desert | 70 / 40 / 20 | 108% |
-| 4 | Snow Circuit (`snow`) | snow, frozen lake, snowy pines, snowmen, dark-blue road edges | 450 | Pine | 80 / 45 / 25 | 112% |
-| 5 | Night City (`city`) | night-blue ground, lit buildings, street lamps, yellow curbs, lane dashes, 45 degree corners | 700 | Snow | 90 / 50 / 30 | 115% |
+- **Flow:** results card → **Review N mistakes +B ▶** → one card per miss:
+  the question (and the two shapes for Grade 7), "Your answer ✗" in red,
+  "Right answer" in green, the coin change for that stop, and "Here's how:"
+  with the worked steps and the hint. **Whiteboard** opens the same scratch
+  pad as the Math Stop (Done returns to the card). **◀ Back**, **Next ▶**,
+  **Close**; on a computer → / Enter and ← work too.
+- **Bonus: +ceil(N/2) coins per mistake reviewed** (N = the Math Stop reward),
+  so **+3 per mistake in Grade 3 and +5 in Grade 7**, the same as a right
+  answer with a hint. It's paid when the player taps **Done ✓ +B** on the
+  last card; the results card then shows "+B for reviewing mistakes ✓" and
+  the updated total. Closing early pays nothing (the button stays so they
+  can start again).
+- **Why this number:** a miss is −6 / −10 (−3 / −5 with a hint), so a miss
+  plus its review is still −3 / −5 (0 with a hint). Getting it right always
+  beats getting it wrong and reviewing it, so missing on purpose never
+  pays. Even six reviewed mistakes (+18 / +30) are less than the smallest
+  1st prize (50), so racing well stays the main way to earn. Unit-tested in
+  `npm run test:unit` ("review-mistakes bonus").
+- **No farming:** the bonus is offered only after the finish line
+  (`RaceScene.reviewBonusOnOffer()` is 0 mid-race), is paid at most once per
+  race (`claimReviewBonus()`), and quitting from the pause menu throws the
+  race away. Next is locked for 1.2 s on each new card (only the first time
+  it's shown) so the bonus can't be collected by tapping through blind.
+  One known edge: coins never go below 0, so a player at 0 coins loses
+  nothing for a miss but still gets the review bonus. That's at most +18 /
+  +30 a race, less than answering correctly.
+- **Perfect race:** "Perfect — nothing to review! ★" plus an optional
+  "Look back at all N questions" (same cards, marked ✓, no bonus).
+- **Nothing is saved** except the coin total: the list of stops lives on the
+  `RaceScene` and is gone after Race Again, Shop or Menu. The Math Stop now
+  reports what was typed or tapped (`given`) so the card can show it.
 
-- **Ladder:** each track needs the one before it. The shop's Track Ladder
-  panel shows all four paid tracks: *Unlock 250* (green when you can
-  afford it), *After Pine Path* (greyed out), or *Unlocked!*. Tapping a
-  locked card on the menu says what to do ("unlock it in the Shop for 250
-  coins" or "unlock Pine Path first").
-- **Why escalate:** a typical race earns about 60-100 coins (prize + math).
-  From zero, roughly 2 races to open Desert, about 4 more for Pine, 6 more
-  for Snow and 8 more for Night City. That's about 20 races, plus 300 coins
-  of speed/steering upgrades and 80 of paint, so there's always something
-  to save for. Bigger prizes on later tracks make each unlock pay off.
-- **Opponent speed:** the two computer karts get 4-15% faster on later
-  tracks (still under the player's base top speed of 300, and the existing
-  rubber-banding still slows them when they're far ahead), so speed and
-  steering upgrades matter more.
-- The starter's save id stays `forest` (renamed on screen from "Forest
-  Loop" to "Meadow Loop" so it isn't confused with Pine Path). Unlocks are
-  stored in the existing `unlockedCourses` array of `mathKartSave` (same
-  private-mode-safe path); unknown ids are dropped, and `RaceScene` falls
+## Track shapes and hazards (v5)
+
+The five tracks were redesigned so each one drives differently. Course data
+(`src/game/courses.js`) is now a closed list of corners `[x, y, radius?]`;
+`roundedLoop()` in `trackMath.js` turns every corner into a circular arc, so
+a track can be wide and sweeping (radius 330) or tight and technical (170).
+Stars, ramps and the river are placed by lap fraction (0 = start line).
+
+| # | Track (id) | Shape | Lap | 2 laps* | Features | Unlock | Prizes | Opponents |
+|---|------------|-------|----:|--------:|----------|------:|--------|-----------|
+| 1 | Meadow Loop (`forest`) | wide, sweeping, asymmetric kidney | 5,013 px | 34 s (32 via bridge) | creek + bridge | free | 50 / 30 / 15 | 100% |
+| 2 | Desert Canyon (`desert`) | long serpentine (three long legs and two hairpins) | 7,718 px | 45 s | 2 jump ramps, 2 sand dunes | 100 | 60 / 35 / 20 | 104% |
+| 3 | Pine Path (`pine`) | tight and twisty: V chicane, S-bends, a dip | 6,827 px | 43 s (41 via bridge) | river + bridge, 2 logs | 250 | 70 / 40 / 20 | 108% |
+| 4 | Snow Circuit (`snow`) | figure 8 that crosses itself in the middle | 6,506 px | 40 s | 4 snow moguls (two on each diagonal) | 450 | 80 / 45 / 25 | 112% |
+| 5 | Night City (`city`) | short, blocky city blocks with 90 degree corners | 4,708 px | 26 s | 2 jump ramps (one right after the start) | 700 | 90 / 50 / 30 | 115% |
+
+\* Unit-test autopilot, base kart, no Math Stops. Lap lengths vary by 1.6×.
+
+### Jumps and bumps (`src/game/features.js`, `raceLogic.js`)
+- **Jump ramp** (Desert, City): an orange ramp with yellow chevrons across
+  the whole road. Driving over it at 90+ px/s launches the kart for 0.75 s
+  with a boost of up to 125% top speed (speed × 1.25 + 50) that fades over
+  1.3 s. "WHOOSH!" pops up.
+- **Bump** (Desert dunes, Pine logs, Snow moguls): a small 0.32 s hop and
+  up to 110% top speed. "Boing!". Bumps on the same stretch are at least
+  200 px apart so a fast kart lands between them.
+- **In the air:** the kart keeps its speed (no grass or water slow-down),
+  steers at half strength, and turns itself toward the road direction at
+  up to 1.6 rad/s. That makes landings forgiving on the iPad: a kart
+  knocked 0.5 rad off line lands pointing down the road (unit-tested).
+  The kart sprite grows up to 35% with a shadow under it. No 3D, no
+  crashes. Nothing new to press: just hold GO.
+- Ramps only sit on straights with room to land (360 px after a jump) and
+  away from stars, rivers and the figure-8 crossing (unit-tested).
+
+### River, ford and bridge (Meadow, Pine)
+- A river crosses the road once. On the road it's lighter blue with white
+  ripples (the **ford**), with a blue **SPLASH!** sign before it. Driving
+  through water caps speed at **40%** of top speed (grass is 55%) and
+  sheds speed fast, with splashes. The first time each race a tip says
+  "Splash! Water is slow. Try the bridge!".
+- A **bridge road** forks off before the river (white arrows, a yellow
+  **BRIDGE** sign with an arrow), runs 280 px to the side straight across
+  the river on a wooden deck with rails, then rejoins. It counts as road,
+  and there's no slow-down on the deck. It's a bit longer, but still faster:
+  in the unit test the bridge route beats wading by about 1 s per crossing.
+  Its bends are radius 150+ and the deck is straight.
+- The river ends in a pond on one side and runs off the map on the other,
+  so it only meets the road at the ford (unit-tested).
+
+### AI karts and features
+- Movement lives in `stepAI()` (`raceLogic.js`), shared with the unit test.
+  **Zoom** (orange) always takes the bridge; **Bolt** (blue) wades through
+  the ford at 50% speed. Both hop every ramp with a short 5-15% boost.
+  AI karts ride the loop, so they can't get stuck: the unit test checks
+  they always move forward, never drop below 40% speed and finish two laps
+  on every track.
+
+### Figure 8 (Snow Circuit)
+- The road crosses itself at about 73 degrees (a flat crossroads, no
+  collisions). Lap progress only searches road near the kart's last
+  position, so driving through the crossing never jumps progress to the
+  other road. Stars and moguls are kept 300-450+ px away from the crossing
+  and every star can only be reached from its own road (unit-tested).
+
+### Unlock ladder (unchanged)
+- Meadow (free) → Desert (100) → Pine (250) → Snow (450) → Night City
+  (700), each needing the one before. Prices and prizes are **not**
+  rebalanced: most coins come from the six Math Stops per race (+36 /
+  +60 when all are right) plus the prize, and every track still has six
+  stops. Compared with v4 (33-37 s for two laps everywhere), Desert takes
+  about 30% longer, Pine and Snow 15-20% longer, Meadow about the same and
+  City about 30% less. That changes coins per minute a little but not the
+  number of races needed to climb the ladder. Harder tracks still pay
+  bigger prizes and have faster opponents.
+- The shop's Track Ladder panel shows all four paid tracks: *Unlock 250*
+  (green when you can afford it), *After Pine Path* (greyed out), or
+  *Unlocked!*. Tapping a locked card on the menu says what to do.
+- **Why escalate:** a typical race earns about 60-100 coins (prize + math +
+  review). From zero, roughly 2 races to open Desert, about 4 more for
+  Pine, 6 more for Snow and 8 more for Night City, plus 300 coins of
+  speed/steering upgrades and 80 of paint.
+- The starter's save id stays `forest` ("Meadow Loop" on screen). Unlocks
+  are in the existing `unlockedCourses` array of `mathKartSave` (same
+  private-mode-safe path). Unknown ids are dropped, and `RaceScene` falls
   back to Meadow Loop if asked for a locked track.
-- Desert Canyon was lightly reshaped: one extra waypoint softens a 108
-  degree corner that also sat 5 px from the course edge. Its checkpoint 3
-  index moved from 14 to 15.
-- **Menu layout:** five 180x220 cards with a real mini-map of each road and
-  either the prize (unlocked) or the price (locked). They sit inside the
-  fixed 1024x768 design space, so phones and iPads show them all (the
-  canvas is scaled to fit).
+- **Menu and shop mini-maps** are drawn from the same geometry: the real
+  road (including the bridge road), the river and pond, the Snow lake, and
+  ramps as orange (jump) or brown (bump) dots. The menu still has five
+  180×220 cards inside the fixed 1024×768 design space, so phones and iPads
+  show them all.
 
 ### Reachable checkpoints (the old "fenced out" bug)
-Kart driving, lap progress and checkpoint detection now live in
-`src/game/raceLogic.js` and are used unchanged by `RaceScene` and by
-`npm run test:unit`. For every track the unit test:
-- checks every waypoint keeps the road at least 60 px inside the course
-  (karts are clamped 40 px from the edge), non-neighbouring road pieces stay
-  at least 250 px apart (never cross or merge), no corner turns more than
-  100 degrees, and the three stars are spread around the lap;
-- drives two full laps with a look-ahead autopilot (base kart, and a
-  max-speed kart with no steering upgrades) using the real rules. It must
-  reach all 6 stars and finish, never touch the course edge, and stay on the
-  road over 88% of the time. Today all five tracks: 0% off-road, 33-37 s for
-  two laps.
+Kart driving, lap progress, checkpoint detection, water, ramps and AI
+movement live in `src/game/raceLogic.js` / `features.js` and are used
+unchanged by `RaceScene`, `AIKart` and `npm run test:unit`. For every track
+the unit test checks:
+- geometry: the road (and bridge road) stays 60+ px inside the course;
+  separate stretches of road stay 250+ px apart except at the planned
+  figure-8 crossing (which must be at 55+ degrees); no bend tighter than
+  radius 140; the karts start on a straight;
+- stars: spread round the lap, only reachable from their own road, and
+  away from ramps, the river/bridge and the crossing;
+- features: ramps on straights with room to land and 200+ px apart; the
+  river crosses the road and the bridge road exactly once each, only meets
+  the road at the ford, the pond is clear of roads, the bridge road is on a
+  straight, has gentle bends, a straight deck and a visible island;
+- driving: an autopilot (base kart, and a max-speed kart with no steering
+  upgrades) must reach all 6 stars and finish two laps, never touch the
+  course edge, stay on the road over 88% of the time, and take off from
+  every ramp on both laps. On river tracks it gets wet in the ford both
+  laps, while a second autopilot that follows the bridge road stays dry
+  and finishes faster. Both AI karts finish two laps, hop every ramp, and
+  one stays dry while the other wades;
+- physics: the ford caps speed at 40%, the bridge deck doesn't slow you and
+  counts as road, a jump lasts 0.75 s with a boost that wears off, a slow
+  kart just rolls over a ramp, and landings are forgiving.
 
 The smoke test also races every track on the iOS 12 profile (star 1 opens a
-Math Stop, the finish pays that track's prize) and walks the shop ladder
-(Desert, Pine refused without coins, Snow refused before Pine, then Pine >
-Snow > City).
+Math Stop, the ford slows the kart, the bridge doesn't, a ramp launches it,
+the finish pays that track's prize) and walks the shop ladder.
 
 ### Adding a track
-Add an entry to `COURSES` in `src/game/courses.js` (points, checkpoint
-indexes, palette, cost, prizes, aiSpeed), append its id to `COURSE_ORDER`,
-add a decorator in `trackBuilder.js`, and run `npm run test:unit`. It
-tells you exactly which waypoint or corner is a problem. The menu has room
+Add an entry to `COURSES` in `src/game/courses.js`: `corners` (a closed list
+of `[x, y, radius?]`; corner 0 → corner 1 must be a straight, and the start
+line is its midpoint; a corner in a straight line is fine for moving the
+start), `radius`, `checkpoints` (three lap fractions), optional `ramps`
+(`{ kind: 'jump' | 'bump', at }`), `river` (`{ at, side, width, near, far,
+wiggle, pond, bridge: { offset, flat, ramp, radius } }`, on a straight of
+about 1,150 px), `crossings` for a figure 8, plus palette, cost, prizes and
+aiSpeed. Append its id to `COURSE_ORDER`, add a decorator in
+`trackBuilder.js`, and run `npm run tracks:preview` (shows lap fractions)
+and `npm run test:unit`, which says exactly what's wrong. The menu has room
 for five cards; a sixth needs a second row or smaller cards.
 
 ## What Was Built
@@ -320,7 +458,9 @@ A complete working prototype of a Mario Kart-style educational racing game with:
 ✅ Top-down kart racing with keyboard controls (Arrow Keys / WASD)  
 ✅ **Touch controls for iPad/tablets** (on-screen buttons)  
 ✅ **Fixed 4:3 layout scaled to fit** any screen size  
-✅ **5 race tracks on an unlock ladder** (Meadow, Desert, Pine, Snow, Night City)  
+✅ **5 race tracks on an unlock ladder** (Meadow, Desert, Pine, Snow, Night City), each with its own shape, length and features  
+✅ **Jump ramps, bumps, rivers with a slow ford and a bridge road**  
+✅ **After-race mistake review** with a small coin bonus  
 ✅ Math checkpoint system - racing pauses for problems  
 ✅ Correct/incorrect answer feedback with coin rewards/penalties  
 ✅ 2 AI opponent karts with waypoint navigation  
@@ -382,21 +522,25 @@ The pack system is designed for easy expansion:
 4. Run `npm run test:unit`; see README for the full template
 
 #### Race Logic (`src/scenes/RaceScene.js` + `RaceHudScene.js`)
-- Simple kinematic driving (accelerate / brake / coast), slower on grass
+- Simple kinematic driving (accelerate / brake / coast), slower on grass,
+  much slower in river water; ramps and bumps launch the kart with a boost
 - 2 laps x 3 checkpoint stars; the finish counts once all stars in the lap are done
 - Progress = distance along the track loop, so positions compare fairly
-- The HUD, touch pedals, Math Stop, pause and results run in a separate
-  overlay scene that never scrolls with the camera
+- The HUD, touch pedals, Math Stop, pause, results and the mistake review
+  run in a separate overlay scene that never scrolls with the camera
 
-#### AI System (`src/game/AIKart.js`)
+#### AI System (`src/game/AIKart.js`, `stepAI` in `raceLogic.js`)
 - Rides the track loop in its own lane with a little wobble
+- One AI kart takes the bridge, the other wades; both hop ramps
 - Gentle rubber-banding keeps races close
 - Pauses during countdown, Math Stops and pause
 
 #### Track System (`src/game/trackBuilder.js`, `trackMath.js`)
-- Each course is one closed loop of waypoints; the road art, AI path,
-  checkpoints and progress tracking all come from it
-- Checkpoints are waypoint indexes; decorations are seeded so they're the same every race
+- Each course is a closed list of rounded corners that becomes one loop of
+  waypoints; the road art, AI path, checkpoints, features and progress
+  tracking all come from it
+- Checkpoints and features are lap fractions; decorations are seeded so
+  they're the same every race and keep clear of the road, river and bridge
 - Add a track by adding an entry to `COURSES` in `courses.js` (see "Adding a track" above)
 
 #### Progression System
@@ -491,6 +635,8 @@ const fractionsPack = {
 2. **Grade-level selection only**: Kids pick Grade 3 or Grade 7; packs within a grade are mixed. Could allow picking single topics.
 
 3. **Fixed checkpoint count**: Always 3 stars per lap, 2 laps. Could vary by track.
+   Karts don't collide (they pass through each other, including at the
+   Snow Circuit crossing).
 
 4. **Simple AI**: Rides a fixed lane with rubber-banding. Could add powerups or strategic behavior.
 
