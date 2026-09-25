@@ -1,74 +1,64 @@
+import { pointAt } from './trackMath.js';
+import { drawKart } from '../ui/theme.js';
+
 /**
- * AI Kart - Computer-controlled racing opponent
+ * AI Kart - rides along the track loop in its own lane. Progress is simply
+ * the distance travelled, which makes race positions easy to compare.
  */
 export default class AIKart {
-    constructor(scene, x, y, color, name) {
+    constructor(scene, track, opts) {
         this.scene = scene;
-        this.name = name;
-        this.checkpointIndex = 0;
-        this.pathProgress = 0;
-        this.isPaused = false;
-        this.isStopped = false;
-        
-        // Visual
-        this.sprite = scene.add.rectangle(x, y, 40, 60, color)
-            .setStrokeStyle(4, 0x000000);
-        
-        scene.physics.add.existing(this.sprite);
-        this.sprite.body.setCollideWorldBounds(true);
-        
-        // AI params
-        this.speed = Phaser.Math.Between(120, 160);
-        this.currentWaypointIndex = 0;
+        this.track = track;
+        this.name = opts.name;
+        this.baseSpeed = opts.speed;
+        this.lane = opts.lane || 0;
+        this.along = opts.along || 0;
+        this.wobble = Math.random() * Math.PI * 2;
+        this.isPaused = true;
+        this.finished = false;
+
+        this.sprite = drawKart(scene.add.graphics(), opts.color);
+        this.place();
     }
-    
-    update(delta, waypoints) {
-        if (this.isPaused || this.isStopped || !waypoints || waypoints.length === 0) {
-            this.sprite.body.setVelocity(0, 0);
-            return;
-        }
-        
+
+    get progress() {
+        return this.along;
+    }
+
+    place() {
+        const p = pointAt(this.track.loop, this.along);
+        const lane = this.lane + Math.sin(this.wobble) * 14;
+        this.sprite.x = p.x + p.normX * lane;
+        this.sprite.y = p.y + p.normY * lane;
+        this.sprite.rotation = Math.atan2(p.dirX, -p.dirY);
+    }
+
+    update(delta, playerProgress) {
+        if (this.isPaused || this.finished) return;
         const dt = delta / 1000;
-        
-        // Get target waypoint
-        const target = waypoints[this.currentWaypointIndex];
-        
-        // Calculate direction to target
-        const dx = target.x - this.sprite.x;
-        const dy = target.y - this.sprite.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // If close enough to waypoint, move to next
-        if (distance < 50) {
-            this.currentWaypointIndex = (this.currentWaypointIndex + 1) % waypoints.length;
-            this.pathProgress = this.currentWaypointIndex / waypoints.length;
-            
-            // Check if passed checkpoint
-            if (this.currentWaypointIndex % 5 === 0) {
-                this.checkpointIndex++;
-            }
-        }
-        
-        // Move towards target
-        const vx = (dx / distance) * this.speed;
-        const vy = (dy / distance) * this.speed;
-        this.sprite.body.setVelocity(vx, vy);
-        
-        // Rotate to face direction
-        this.sprite.rotation = Math.atan2(vx, -vy);
+
+        // Gentle rubber-banding keeps races close for young drivers.
+        const gap = this.along - playerProgress;
+        let speed = this.baseSpeed;
+        if (gap > 700) speed *= 0.78;
+        else if (gap > 350) speed *= 0.9;
+        else if (gap < -900) speed *= 1.15;
+
+        this.along += speed * dt;
+        this.wobble += dt * 1.3;
+        this.place();
     }
-    
+
     pause() {
         this.isPaused = true;
-        this.sprite.body.setVelocity(0, 0);
     }
-    
+
     resume() {
-        this.isPaused = false;
+        if (!this.finished) this.isPaused = false;
     }
-    
-    stop() {
-        this.isStopped = true;
-        this.sprite.body.setVelocity(0, 0);
+
+    finish() {
+        this.finished = true;
+        this.isPaused = true;
     }
 }

@@ -1,225 +1,189 @@
 import Phaser from 'phaser';
 import { getSaveData, updateSaveData } from '../utils/saveManager.js';
+import {
+    GAME_WIDTH, GAME_HEIGHT, COLORS, INK, KART_COLORS, textStyle, addTitle, drawPanel,
+    drawKart, drawMenuBackdrop, createButton, createCoinPill, fadeToScene
+} from '../ui/theme.js';
+
+const W = GAME_WIDTH;
+const H = GAME_HEIGHT;
+const UPGRADE_COST = 30;
+const MAX_LEVEL = 5;
+const COLOR_COST = 20;
+const DESERT_COST = 100;
 
 export default class ShopScene extends Phaser.Scene {
     constructor() {
         super({ key: 'ShopScene' });
     }
 
+    init(data) {
+        this.toastText = (data && data.toast) || null;
+    }
+
     create() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
         const save = getSaveData();
+        this.save = save;
 
-        // Title
-        this.add.text(width / 2, 60, '🛒 SHOP & GARAGE 🛒', {
-            fontSize: '56px',
-            fontFamily: 'Arial Black',
-            color: '#FFD700',
-            stroke: '#FF4500',
-            strokeThickness: 6
-        }).setOrigin(0.5);
-
-        // Coins display
-        this.coinsText = this.add.text(width / 2, 130, `💰 Coins: ${save.coins}`, {
-            fontSize: '36px',
-            fontFamily: 'Arial',
-            color: '#FFFF00',
-            stroke: '#000000',
-            strokeThickness: 4
-        }).setOrigin(0.5);
-
-        // Upgrades section
-        this.add.text(200, 200, '⚡ UPGRADES', {
-            fontSize: '32px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 4
+        drawMenuBackdrop(this);
+        addTitle(this, W / 2, 62, 'SHOP', 84);
+        createCoinPill(this, W - 118, 56, save.coins);
+        createButton(this, 104, 56, {
+            width: 170, height: 76, radius: 26, label: '\u25C0 Back', fontSize: 34,
+            color: COLORS.red,
+            onTap: () => fadeToScene(this, 'MenuScene')
         });
 
-        // Speed upgrade
-        this.createUpgradeItem(200, 260, '🚀 Speed Boost', 30, 'speedUpgrades', save, 5);
+        this.createUpgrades(40, 130, 460, 360);
+        this.createPaint(524, 130, 460, 360);
+        this.createTrackUnlock(40, 520, 944, 200);
 
-        // Handling upgrade
-        this.createUpgradeItem(200, 360, '🎯 Better Handling', 30, 'handlingUpgrades', save, 5);
+        if (this.toastText) this.toast(this.toastText, COLORS.green);
+    }
 
-        // Unlockables section
-        this.add.text(700, 200, '🔓 UNLOCKABLES', {
-            fontSize: '32px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 4
-        });
+    sectionHeader(x, y, width, label) {
+        this.add.text(x + width / 2, y + 36, label, textStyle(32, INK)).setOrigin(0.5);
+    }
 
-        // Desert course
-        const desertUnlocked = save.unlockedCourses.includes('desert');
-        this.createUnlockItem(700, 260, '🏜️ Desert Track', 100, 'unlockedCourses', 'desert', desertUnlocked, save);
+    buy(cost, apply, message) {
+        const save = getSaveData();
+        if (save.coins < cost) {
+            this.toast('You need ' + (cost - save.coins) + ' more coins. Win races to earn more!', COLORS.orange);
+            return;
+        }
+        save.coins -= cost;
+        apply(save);
+        updateSaveData(save);
+        this.scene.restart({ toast: message });
+    }
 
-        // Kart colors
-        this.add.text(700, 380, 'Kart Colors (20 coins each):', {
-            fontSize: '24px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 3
-        });
+    createUpgrades(x, y, width, height) {
+        const g = this.add.graphics();
+        drawPanel(g, x, y, width, height, COLORS.white, 28);
+        this.sectionHeader(x, y, width, 'Kart Upgrades');
 
-        const colors = [
-            { name: 'blue', color: 0x4444FF, label: 'Blue' },
-            { name: 'green', color: 0x44FF44, label: 'Green' },
-            { name: 'yellow', color: 0xFFFF44, label: 'Yellow' },
-            { name: 'purple', color: 0xFF44FF, label: 'Purple' }
+        const rows = [
+            { key: 'speedUpgrades', name: 'Speed', blurb: 'Go faster!', color: COLORS.orange },
+            { key: 'handlingUpgrades', name: 'Steering', blurb: 'Turn quicker!', color: COLORS.blue }
         ];
+        rows.forEach((row, i) => {
+            const ry = y + 120 + i * 130;
+            const level = this.save[row.key];
+            this.add.text(x + 30, ry - 30, row.name, textStyle(34, INK, { align: 'left' })).setOrigin(0, 0.5);
+            this.add.text(x + 30, ry + 6, row.blurb, textStyle(20, '#868e96', { align: 'left' })).setOrigin(0, 0.5);
 
-        colors.forEach((colorData, index) => {
-            const x = 700 + (index % 2) * 150;
-            const y = 440 + Math.floor(index / 2) * 80;
-            this.createColorItem(x, y, colorData.label, colorData.name, colorData.color, 20, save);
+            const pips = this.add.graphics();
+            for (let p = 0; p < MAX_LEVEL; p++) {
+                pips.fillStyle(p < level ? row.color : 0xdee2e6, 1);
+                pips.fillRoundedRect(x + 30 + p * 36, ry + 30, 28, 20, 6);
+                pips.lineStyle(3, COLORS.ink, 1);
+                pips.strokeRoundedRect(x + 30 + p * 36, ry + 30, 28, 20, 6);
+            }
+
+            const maxed = level >= MAX_LEVEL;
+            const affordable = this.save.coins >= UPGRADE_COST;
+            createButton(this, x + width - 110, ry + 4, {
+                width: 180, height: 92, radius: 26,
+                label: maxed ? 'MAX!' : 'Buy\n' + UPGRADE_COST + ' coins',
+                fontSize: maxed ? 36 : 26,
+                color: maxed ? COLORS.gold : (affordable ? COLORS.green : COLORS.grayDark),
+                enabled: !maxed,
+                onTap: () => this.buy(UPGRADE_COST, (s) => { s[row.key] += 1; },
+                    row.name + ' is now level ' + (level + 1) + '!')
+            });
         });
-
-        // Back button
-        const backBtn = this.add.rectangle(width / 2, height - 80, 300, 60, 0xFF4444)
-            .setStrokeStyle(4, 0x000000)
-            .setInteractive({ useHandCursor: true })
-            .on('pointerdown', () => {
-                this.scene.start('MenuScene');
-            })
-            .on('pointerover', () => backBtn.setFillStyle(0xFF6666))
-            .on('pointerout', () => backBtn.setFillStyle(0xFF4444));
-
-        this.add.text(width / 2, height - 80, 'BACK TO MENU', {
-            fontSize: '28px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 4
-        }).setOrigin(0.5);
     }
 
-    createUpgradeItem(x, y, label, cost, upgradeKey, save, maxLevel) {
-        const currentLevel = save[upgradeKey] || 0;
-        const canUpgrade = currentLevel < maxLevel && save.coins >= cost;
+    createPaint(x, y, width, height) {
+        const g = this.add.graphics();
+        drawPanel(g, x, y, width, height, COLORS.white, 28);
+        this.sectionHeader(x, y, width, 'Kart Paint');
 
-        const container = this.add.container(x, y);
+        const names = Object.keys(KART_COLORS);
+        names.forEach((name, i) => {
+            const col = i % 3;
+            const row = Math.floor(i / 3);
+            const cx = x + 90 + col * 140 + (row === 1 ? 70 : 0);
+            const cy = y + 140 + row * 130;
+            const owned = this.save.unlockedColors.indexOf(name) !== -1;
+            const equipped = this.save.currentColor === name;
 
-        const btn = this.add.rectangle(0, 0, 380, 70, canUpgrade ? 0x4CAF50 : 0x888888)
-            .setStrokeStyle(4, 0x000000);
-        
-        const text = this.add.text(-180, -10, `${label}`, {
-            fontSize: '24px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 3
-        });
+            const tile = this.add.graphics();
+            tile.fillStyle(equipped ? COLORS.yellow : 0xf1f3f5, 1);
+            tile.fillRoundedRect(cx - 58, cy - 58, 116, 116, 22);
+            tile.lineStyle(equipped ? 6 : 4, COLORS.ink, 1);
+            tile.strokeRoundedRect(cx - 58, cy - 58, 116, 116, 22);
 
-        const levelText = this.add.text(-180, 15, `Level: ${currentLevel}/${maxLevel}`, {
-            fontSize: '18px',
-            fontFamily: 'Arial',
-            color: '#FFFF00',
-            stroke: '#000000',
-            strokeThickness: 2
-        });
+            const kart = drawKart(this.add.graphics(), KART_COLORS[name].value);
+            kart.setPosition(cx, cy - 10).setRotation(Math.PI / 2).setScale(1.1);
 
-        const costText = this.add.text(140, 0, `${cost} 💰`, {
-            fontSize: '22px',
-            fontFamily: 'Arial',
-            color: '#FFD700',
-            stroke: '#000000',
-            strokeThickness: 3
-        }).setOrigin(0.5);
+            const tag = equipped ? 'Driving' : (owned ? 'Tap to use' : COLOR_COST + ' coins');
+            this.add.text(cx, cy + 38, tag, textStyle(18, equipped ? INK : (owned ? '#2b8a3e' : '#e67700'))).setOrigin(0.5);
 
-        container.add([btn, text, levelText, costText]);
-
-        if (canUpgrade) {
-            btn.setInteractive({ useHandCursor: true })
-                .on('pointerdown', () => {
-                    save.coins -= cost;
-                    save[upgradeKey]++;
+            const hit = this.add.rectangle(cx, cy, 124, 124).setInteractive({ useHandCursor: true });
+            hit.on('pointerup', () => {
+                if (equipped) return;
+                if (owned) {
+                    const save = getSaveData();
+                    save.currentColor = name;
                     updateSaveData(save);
-                    this.scene.restart();
-                })
-                .on('pointerover', () => btn.setFillStyle(0x66BB6A))
-                .on('pointerout', () => btn.setFillStyle(0x4CAF50));
-        }
+                    this.scene.restart({ toast: KART_COLORS[name].label + ' kart ready!' });
+                } else {
+                    this.buy(COLOR_COST, (s) => {
+                        s.unlockedColors.push(name);
+                        s.currentColor = name;
+                    }, 'New ' + KART_COLORS[name].label + ' paint!');
+                }
+            });
+        });
     }
 
-    createUnlockItem(x, y, label, cost, unlockArrayKey, unlockValue, isUnlocked, save) {
-        const canUnlock = !isUnlocked && save.coins >= cost;
+    createTrackUnlock(x, y, width, height) {
+        const g = this.add.graphics();
+        drawPanel(g, x, y, width, height, COLORS.white, 28);
 
-        const btn = this.add.rectangle(x, y, 380, 70, isUnlocked ? 0x888888 : (canUnlock ? 0xFF9800 : 0x666666))
-            .setStrokeStyle(4, 0x000000);
+        g.fillStyle(0xf2d49b, 1);
+        g.fillRoundedRect(x + 24, y + 24, 230, height - 48, 18);
+        g.lineStyle(22, 0xb08968, 1);
+        g.strokeRoundedRect(x + 56, y + 50, 166, height - 100, 34);
+        g.fillStyle(0x2f9e44, 1);
+        g.fillRoundedRect(x + 132, y + 76, 16, 48, 8);
+        g.fillRoundedRect(x + 116, y + 90, 12, 22, 6);
 
-        const displayText = isUnlocked ? `${label} ✅` : `${label}`;
-        const text = this.add.text(x, y - 10, displayText, {
-            fontSize: '24px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 3
-        }).setOrigin(0.5);
+        this.add.text(x + 290, y + 64, 'New Track: Desert Canyon', textStyle(34, INK, { align: 'left' })).setOrigin(0, 0.5);
+        this.add.text(x + 290, y + 110, 'A twisty sandy race with cactus!', textStyle(22, '#868e96', { align: 'left' })).setOrigin(0, 0.5);
 
-        if (!isUnlocked) {
-            const costText = this.add.text(x, y + 18, `${cost} 💰`, {
-                fontSize: '20px',
-                fontFamily: 'Arial',
-                color: '#FFD700',
-                stroke: '#000000',
-                strokeThickness: 3
-            }).setOrigin(0.5);
-        }
-
-        if (canUnlock) {
-            btn.setInteractive({ useHandCursor: true })
-                .on('pointerdown', () => {
-                    save.coins -= cost;
-                    save[unlockArrayKey].push(unlockValue);
-                    updateSaveData(save);
-                    this.scene.restart();
-                })
-                .on('pointerover', () => btn.setFillStyle(0xFFAA33))
-                .on('pointerout', () => btn.setFillStyle(0xFF9800));
-        }
+        const unlocked = this.save.unlockedCourses.indexOf('desert') !== -1;
+        const affordable = this.save.coins >= DESERT_COST;
+        createButton(this, x + width - 140, y + height / 2 + 4, {
+            width: 230, height: 110, radius: 30,
+            label: unlocked ? 'Unlocked!' : 'Unlock\n' + DESERT_COST + ' coins',
+            fontSize: unlocked ? 34 : 30,
+            color: unlocked ? COLORS.gold : (affordable ? COLORS.green : COLORS.grayDark),
+            enabled: !unlocked,
+            onTap: () => this.buy(DESERT_COST, (s) => {
+                s.unlockedCourses.push('desert');
+                s.lastCourse = 'desert';
+            }, 'Desert Canyon unlocked!')
+        });
     }
 
-    createColorItem(x, y, label, colorName, colorValue, cost, save) {
-        const isUnlocked = save.unlockedColors.includes(colorName);
-        const isCurrent = save.currentColor === colorName;
-        const canBuy = !isUnlocked && save.coins >= cost;
-
-        const btn = this.add.rectangle(x, y, 140, 60, colorValue)
-            .setStrokeStyle(4, isCurrent ? 0xFFFF00 : 0x000000);
-
-        const text = this.add.text(x, y + 35, isUnlocked ? (isCurrent ? 'EQUIPPED' : 'SELECT') : `${cost}💰`, {
-            fontSize: '16px',
-            fontFamily: 'Arial',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setOrigin(0.5);
-
-        if (isUnlocked && !isCurrent) {
-            btn.setInteractive({ useHandCursor: true })
-                .on('pointerdown', () => {
-                    save.currentColor = colorName;
-                    updateSaveData(save);
-                    this.scene.restart();
-                })
-                .on('pointerover', () => btn.setStrokeStyle(4, 0xFFFF00))
-                .on('pointerout', () => btn.setStrokeStyle(4, 0x000000));
-        } else if (canBuy) {
-            btn.setInteractive({ useHandCursor: true })
-                .on('pointerdown', () => {
-                    save.coins -= cost;
-                    save.unlockedColors.push(colorName);
-                    save.currentColor = colorName;
-                    updateSaveData(save);
-                    this.scene.restart();
-                })
-                .on('pointerover', () => btn.setStrokeStyle(4, 0x00FF00))
-                .on('pointerout', () => btn.setStrokeStyle(4, 0x000000));
-        }
+    toast(message, color) {
+        if (this.toastObj) this.toastObj.destroy();
+        const c = this.add.container(W / 2, H - 24).setDepth(50);
+        const text = this.add.text(0, 0, message, textStyle(26, '#ffffff', {
+            stroke: INK, strokeThickness: 5
+        })).setOrigin(0.5);
+        const pad = 26;
+        const g = this.add.graphics();
+        g.fillStyle(color, 1);
+        g.fillRoundedRect(-text.width / 2 - pad, -28, text.width + pad * 2, 56, 28);
+        g.lineStyle(4, COLORS.ink, 1);
+        g.strokeRoundedRect(-text.width / 2 - pad, -28, text.width + pad * 2, 56, 28);
+        c.add([g, text]);
+        c.setAlpha(0);
+        this.tweens.add({ targets: c, alpha: 1, y: H - 40, duration: 200 });
+        this.tweens.add({ targets: c, alpha: 0, delay: 2600, duration: 400 });
+        this.toastObj = c;
     }
 }
