@@ -342,6 +342,7 @@ async function ipadIos12(browser, baseUrl) {
     check((await mathState(page)).typed === '12', 'keypad digits show up in the answer box');
     await shot(page, 'ipad-05b-typed');
 
+    const statsBeforeBoard = await raceStats(page);
     await tapGame(page, MATH.whiteboard[0], MATH.whiteboard[1]);
     await page.waitForFunction(() => {
         const wb = document.getElementById('mk-whiteboard');
@@ -382,7 +383,7 @@ async function ipadIos12(browser, baseUrl) {
     check(back.question === typedStop.question && back.typed === '12' && !back.answered && !back.closed && back.whiteboardOpens === 1,
         'Done returns to the same question with the typed digits kept ("' + back.typed + '")');
     const statsMid = await raceStats(page);
-    check(statsMid.coins === 100, 'drawing and closing the whiteboard does not score anything');
+    check(statsMid.coins === statsBeforeBoard.coins && statsMid.asked === statsBeforeBoard.asked, 'drawing and closing the whiteboard does not score anything (' + JSON.stringify(statsBeforeBoard) + ' -> ' + JSON.stringify(statsMid) + ')');
 
     await tapGame(page, MATH.hint[0], MATH.hint[1]);
     await page.waitForTimeout(200);
