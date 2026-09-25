@@ -37,7 +37,7 @@ Then open the URL shown (usually `http://localhost:5173/math-kart/`).
 
 ### Gameplay
 1. **Menu**: pick your **grade** (Grade 3 or Grade 7, remembered for next
-   time), pick a track card, tap **START RACE**
+   time), pick a track card (locked ones show their price), tap **START RACE**
 2. **Race**: 2 laps. Follow the yellow arrow to the yellow ⭐ stars (3 per lap)
 3. **Math Stop** at each star: everyone pauses while you answer
    - About half the questions need a **typed answer** on the big number
@@ -60,14 +60,21 @@ Then open the URL shown (usually `http://localhost:5173/math-kart/`).
 
    A wrong guess without a hint is the worst outcome on purpose; see
    [NOTES.md](NOTES.md#coins-hints-and-penalties) for why.
-5. **Finish**: cross the checkered line after lap 2
-   - 🥇 1st place: 50 coins
-   - 🥈 2nd place: 30 coins
-   - 🥉 3rd place: 15 coins
+5. **Finish**: cross the checkered line after lap 2. Prizes depend on the
+   track (harder tracks pay more, and the other karts are a bit faster):
+
+   | Track | Unlock | Needs | 🥇 1st | 🥈 2nd | 🥉 3rd |
+   |-------|-------:|-------|------:|------:|------:|
+   | Meadow Loop (grassy starter) | free | - | 50 | 30 | 15 |
+   | Desert Canyon (sand, cactus) | 100 | Meadow | 60 | 35 | 20 |
+   | Pine Path (dark woods, S-bend) | 250 | Desert | 70 | 40 | 20 |
+   | Snow Circuit (frozen lake) | 450 | Pine | 80 | 45 | 25 |
+   | Night City (lights, sharp corners) | 700 | Snow | 90 | 50 | 30 |
+
 6. **Shop**: spend coins on
    - Speed upgrades (30 coins each, max 5 levels)
    - Steering upgrades (30 coins each, max 5 levels)
-   - Desert Canyon track unlock (100 coins)
+   - The **Track Ladder**: unlock tracks in order (100 → 250 → 450 → 700)
    - Kart paint (20 coins each)
 
 ### Controls
@@ -119,7 +126,7 @@ better (6.7, 6.67, 6.666) or the exact fraction `20/3`. Answers that end
 ```bash
 npm install            # install dependencies (node_modules is git-ignored)
 npm run dev            # dev server
-npm run test:unit      # check thousands of generated problems + coin rules
+npm run test:unit      # generated problems, coin rules, autopilot laps of every track
 npm run build          # production build -> dist/
 npm run preview        # serve dist/ locally
 npm run check:legacy   # assert dist/ JS is safe for iOS 12 Safari
@@ -204,14 +211,17 @@ math-kart/
 │   │   ├── theme.js            # Fonts, colors, buttons, kart drawing
 │   │   ├── mathStop.js         # Math Stop: keypad/choices, hint, coins
 │   │   ├── figureDiagram.js    # Shape diagrams for Grade 7
+│   │   ├── coursePreview.js    # Track mini-maps for menu and shop cards
 │   │   └── whiteboard.js       # Full-screen scratch pad (DOM canvas)
 │   ├── scenes/
 │   │   ├── MenuScene.js        # Grade picker, track cards, START RACE, SHOP
 │   │   ├── RaceScene.js        # Driving, laps, checkpoints, AI
 │   │   ├── RaceHudScene.js     # HUD, touch pedals, pause, results
-│   │   └── ShopScene.js        # Upgrades, paint, track unlock
+│   │   └── ShopScene.js        # Upgrades, paint, track ladder
 │   ├── game/
-│   │   ├── trackBuilder.js     # Track layouts and drawing
+│   │   ├── courses.js          # 5 track layouts, prices, prizes, unlock ladder
+│   │   ├── raceLogic.js        # Kart driving, laps, checkpoints (shared with tests)
+│   │   ├── trackBuilder.js     # Track drawing and themed decorations
 │   │   ├── trackMath.js        # Loop geometry (progress, nearest point)
 │   │   └── AIKart.js           # Computer opponents
 │   ├── math/

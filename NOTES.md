@@ -52,7 +52,9 @@
 - `npm run test:unit`: plain Node. Generates 4000 problems per grade and
   checks every one (answer accepted, wrong choices rejected, diagram numbers
   really similar with x filled in, hints don't state the answer, desks are
-  longer than wide...), plus typed-answer parsing/tolerance and the coin table.
+  longer than wide...), plus typed-answer parsing/tolerance, the coin table,
+  track geometry and an autopilot that must finish two laps of every track
+  (see "Reachable checkpoints" below).
 - `npm run test:smoke`: serves `dist/` and drives headless Chrome with an
   "iPad iOS 12" profile (iPad iOS 12 UA, 1024x768 touch, WebGL disabled,
   `ResizeObserver`/`PointerEvent`/`structuredClone`/etc. deleted). It checks
@@ -61,7 +63,8 @@
   whiteboard (two-finger drawing that never reaches the pedals, then Done back
   to the same question with the typed digits kept), a hint (+5 instead of
   +10), a wrong answer with no hint (−10, correct answer shown), finishing,
-  Race Again, Quit, and a shop purchase. Desktop checks WebGL boot, then (on
+  Race Again, Quit, a shop purchase and the track ladder, plus one race on
+  every track. Desktop checks WebGL boot, then (on
   Canvas, because CI has no GPU and software WebGL takes 10+ s to start a
   race) Grade 3 persistence, a keyboard-typed answer (+6) and drawing with
   the mouse. It also checks that
@@ -80,10 +83,12 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 3. [ ] If instead you see "Math Kart couldn't start", note the grey details
        line, tap Try Again, and if needed clear Website Data (Settings → Safari
        → Advanced → Website Data → github.io → Delete).
-4. [ ] Landscape: the menu fills the screen; title, both track cards,
-       START RACE and SHOP are visible without scrolling or zooming.
-5. [ ] Tap **Grade 7** (it turns green), then the Forest card, then START
-       RACE. The 3-2-1-GO countdown plays.
+4. [ ] Landscape: the menu fills the screen; title, grade cards, all five
+       track cards, START RACE and SHOP are visible without scrolling or
+       zooming. Locked tracks show a lock and a price; tapping one explains
+       how to unlock it.
+5. [ ] Tap **Grade 7** (it turns green), then the Meadow Loop card, then
+       START RACE. The 3-2-1-GO countdown plays.
 6. [ ] Hold GO with the right thumb and steer with the left thumb at the
        same time. The kart moves and turns smoothly (no big stutter).
 7. [ ] Drive off the road: the kart slows down on the grass.
@@ -112,6 +117,13 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
         work.
 12. [ ] Shop: buy a paint color (if you have 20+ coins). The toast shows, coins
         go down, and the new color is used in the next race.
+12a. [ ] Shop → Track Ladder: with 100+ coins unlock Desert Canyon; Pine Path
+         turns green once you have 250. Later tracks say "After …". Back on
+         the menu the new track card is unlocked; race it and check the
+         1st-place prize matches the card (60 for Desert).
+12b. [ ] Optional (to see every track): unlock them all, then race Pine
+         Path, Snow Circuit and Night City once each. Stars and the finish
+         line are reachable and each track looks clearly different.
 13. [ ] Close Safari fully (swipe it away), reopen the link: coins and
         purchases are still there.
 14. [ ] Rotate to portrait: the game shrinks to fit and still works.
@@ -234,6 +246,72 @@ Before this change it was +5 / −2 for everything.
   rotation/resize) until the next question, which starts with a clean pad.
   Nothing on the pad is graded.
 
+## Track unlock ladder (v4)
+
+Five tracks, each with its own palette, layout and decorations. Data lives
+in `src/game/courses.js` (no Phaser); art in `src/game/trackBuilder.js`.
+
+| # | Track (id) | Look | Unlock | Needs | Prizes 1st/2nd/3rd | Opponents |
+|---|------------|------|------:|-------|--------------------|-----------|
+| 1 | Meadow Loop (`forest`) | green grass, flowers, round trees | free | - | 50 / 30 / 15 | 100% |
+| 2 | Desert Canyon (`desert`) | sand, rocks, cactus | 100 | Meadow | 60 / 35 / 20 | 104% |
+| 3 | Pine Path (`pine`) | dark woods, pines, logs, mushrooms, big S-bend | 250 | Desert | 70 / 40 / 20 | 108% |
+| 4 | Snow Circuit (`snow`) | snow, frozen lake, snowy pines, snowmen, dark-blue road edges | 450 | Pine | 80 / 45 / 25 | 112% |
+| 5 | Night City (`city`) | night-blue ground, lit buildings, street lamps, yellow curbs, lane dashes, 45 degree corners | 700 | Snow | 90 / 50 / 30 | 115% |
+
+- **Ladder:** each track needs the one before it. The shop's Track Ladder
+  panel shows all four paid tracks: *Unlock 250* (green when you can
+  afford it), *After Pine Path* (greyed out), or *Unlocked!*. Tapping a
+  locked card on the menu says what to do ("unlock it in the Shop for 250
+  coins" or "unlock Pine Path first").
+- **Why escalate:** a typical race earns about 60-100 coins (prize + math).
+  From zero, roughly 2 races to open Desert, about 4 more for Pine, 6 more
+  for Snow and 8 more for Night City. That's about 20 races, plus 300 coins
+  of speed/steering upgrades and 80 of paint, so there's always something
+  to save for. Bigger prizes on later tracks make each unlock pay off.
+- **Opponent speed:** the two computer karts get 4-15% faster on later
+  tracks (still under the player's base top speed of 300, and the existing
+  rubber-banding still slows them when they're far ahead), so speed and
+  steering upgrades matter more.
+- The starter's save id stays `forest` (renamed on screen from "Forest
+  Loop" to "Meadow Loop" so it isn't confused with Pine Path). Unlocks are
+  stored in the existing `unlockedCourses` array of `mathKartSave` (same
+  private-mode-safe path); unknown ids are dropped, and `RaceScene` falls
+  back to Meadow Loop if asked for a locked track.
+- Desert Canyon was lightly reshaped: one extra waypoint softens a 108
+  degree corner that also sat 5 px from the course edge. Its checkpoint 3
+  index moved from 14 to 15.
+- **Menu layout:** five 180x220 cards with a real mini-map of each road and
+  either the prize (unlocked) or the price (locked). They sit inside the
+  fixed 1024x768 design space, so phones and iPads show them all (the
+  canvas is scaled to fit).
+
+### Reachable checkpoints (the old "fenced out" bug)
+Kart driving, lap progress and checkpoint detection now live in
+`src/game/raceLogic.js` and are used unchanged by `RaceScene` and by
+`npm run test:unit`. For every track the unit test:
+- checks every waypoint keeps the road at least 60 px inside the course
+  (karts are clamped 40 px from the edge), non-neighbouring road pieces stay
+  at least 250 px apart (never cross or merge), no corner turns more than
+  100 degrees, and the three stars are spread around the lap;
+- drives two full laps with a look-ahead autopilot (base kart, and a
+  max-speed kart with no steering upgrades) using the real rules. It must
+  reach all 6 stars and finish, never touch the course edge, and stay on the
+  road over 88% of the time. Today all five tracks: 0% off-road, 33-37 s for
+  two laps.
+
+The smoke test also races every track on the iOS 12 profile (star 1 opens a
+Math Stop, the finish pays that track's prize) and walks the shop ladder
+(Desert, Pine refused without coins, Snow refused before Pine, then Pine >
+Snow > City).
+
+### Adding a track
+Add an entry to `COURSES` in `src/game/courses.js` (points, checkpoint
+indexes, palette, cost, prizes, aiSpeed), append its id to `COURSE_ORDER`,
+add a decorator in `trackBuilder.js`, and run `npm run test:unit`. It
+tells you exactly which waypoint or corner is a problem. The menu has room
+for five cards; a sixth needs a second row or smaller cards.
+
 ## What Was Built
 
 A complete working prototype of a Mario Kart-style educational racing game with:
@@ -242,15 +320,15 @@ A complete working prototype of a Mario Kart-style educational racing game with:
 ✅ Top-down kart racing with keyboard controls (Arrow Keys / WASD)  
 ✅ **Touch controls for iPad/tablets** (on-screen buttons)  
 ✅ **Fixed 4:3 layout scaled to fit** any screen size  
-✅ 2 complete race tracks (Forest and Desert)  
+✅ **5 race tracks on an unlock ladder** (Meadow, Desert, Pine, Snow, Night City)  
 ✅ Math checkpoint system - racing pauses for problems  
 ✅ Correct/incorrect answer feedback with coin rewards/penalties  
 ✅ 2 AI opponent karts with waypoint navigation  
-✅ Race finish with placement-based coin payouts (1st: 50, 2nd: 30, 3rd: 15, 4th: 5)  
+✅ Race finish with placement-based coin payouts per track (1st: 50 on Meadow up to 90 in Night City)  
 ✅ Shop/garage system with multiple upgrade paths:
   - Speed upgrades (5 levels)
   - Handling upgrades (5 levels)
-  - Desert track unlock (100 coins)
+  - Track ladder: Desert 100, Pine 250, Snow 450, Night City 700
   - 5 kart color options (20 coins each)
 ✅ localStorage persistence for all progress  
 ✅ Expandable math pack architecture  
@@ -319,12 +397,12 @@ The pack system is designed for easy expansion:
 - Each course is one closed loop of waypoints; the road art, AI path,
   checkpoints and progress tracking all come from it
 - Checkpoints are waypoint indexes; decorations are seeded so they're the same every race
-- Add a track by adding an entry to `COURSES`
+- Add a track by adding an entry to `COURSES` in `courses.js` (see "Adding a track" above)
 
 #### Progression System
 - Coins are the universal currency
 - Multiple upgrade paths prevent linear progression
-- Desert track unlock provides a medium-term goal (100 coins)
+- The track ladder (100 / 250 / 450 / 700) provides medium- and long-term goals
 - Speed/handling upgrades offer incremental improvements
 - Colors provide cosmetic customization
 - All progress persists across sessions
@@ -437,7 +515,7 @@ const fractionsPack = {
 - [ ] Add a "random pack" mode that mixes problems
 ### Medium Term (Enhanced Gameplay)
 - [ ] Add powerup items on track (speed boost, shield, etc.)
-- [ ] Implement 2-3 more tracks
+- [x] Implement 2-3 more tracks (Pine Path, Snow Circuit, Night City)
 - [ ] Add difficulty selector in menu (Easy/Medium/Hard affects AI speed)
 - [ ] Add "Time Trial" mode (no AI, just beat your best time)
 - [ ] Add animated sprites instead of rectangles
@@ -483,7 +561,7 @@ Stored in `localStorage` under key `mathKartSave`:
 ```json
 {
   "coins": 150,
-  "unlockedCourses": ["forest", "desert"],
+  "unlockedCourses": ["forest", "desert", "pine"],
   "unlockedColors": ["red", "blue", "green"],
   "currentColor": "blue",
   "speedUpgrades": 2,

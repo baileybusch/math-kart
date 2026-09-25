@@ -34,7 +34,9 @@ If you want to run it on your computer instead:
 
 1. **Pick your grade** on the menu: **Grade 3** (add, subtract, units, × ÷)
    or **Grade 7** (similar figures & ratios). The game remembers it.
-2. **Pick a track** (Forest to start, Desert unlocks in the Shop)
+2. **Pick a track**: Meadow Loop is free. Unlock more in the Shop, in order:
+   Desert Canyon (100) → Pine Path (250) → Snow Circuit (450) → Night City (700).
+   Harder tracks pay bigger prizes (1st place: 50 on Meadow up to 90 in Night City)
 3. **Tap START RACE**, wait for 3-2-1-GO!
 4. **Drive to the yellow stars.** The yellow arrow next to your kart points to the next one
 5. **Solve the Math Stop** at each star 💰
@@ -68,7 +70,7 @@ If you want to run it on your computer instead:
 
 - Stay on the road - grass slows you down!
 - Try to get 1st place for maximum coins
-- Unlock the Desert track (costs 100 coins)
+- Save up to unlock the next track on the ladder (100, 250, 450, then 700 coins)
 - Buy Speed and Steering upgrades
 - Change your kart paint in the shop
 - Wrong answers are OK - the game shows the right answer and how to get it, and coins never go below 0!
