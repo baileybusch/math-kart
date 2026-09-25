@@ -7,7 +7,7 @@
  */
 import { GRADES, getProblemForGrade } from '../src/math/grades.js';
 import { checkAnswer, parseTypedNumber, formatNumber, toleranceFor } from '../src/math/answers.js';
-import { coinDelta, coinRules } from '../src/math/economy.js';
+import { coinDelta, coinRules, reviewBonus, reviewBonusPerMistake } from '../src/math/economy.js';
 import similarFigures, { YES, NO } from '../src/math/similarFigures.js';
 import { COURSE_ORDER, STARTER_COURSE, ROAD_WIDTH, allCourses, courseGeometry, courseStatus, courseHazards } from '../src/game/courses.js';
 import {
@@ -52,6 +52,21 @@ console.log('\n[coin rules]');
     ok(-r.wrong > 2, 'grade ' + g + ': wrong-no-hint penalty (' + r.wrong + ') is heavier than the old -2');
     ok(coinDelta(g, true, false) === r.right && coinDelta(g, true, true) === r.hintRight &&
         coinDelta(g, false, true) === r.hintWrong && coinDelta(g, false, false) === r.wrong, 'grade ' + g + ': coinDelta matches table');
+});
+
+console.log('\n[review-mistakes bonus]');
+[3, 7].forEach((g) => {
+    const r = coinRules(g);
+    const per = reviewBonusPerMistake(g);
+    ok(per === r.hintRight && reviewBonus(g, 0) === 0 && reviewBonus(g, 3) === 3 * per, 'grade ' + g + ': +' + per + ' per mistake reviewed (same as a right answer with a hint), nothing when there are no mistakes');
+    const stops = 6;
+    const perfect = stops * r.right;
+    const worse = [1, 2, 3, 4, 5, 6].every((k) => (stops - k) * r.right + k * r.wrong + reviewBonus(g, k) < perfect &&
+        (stops - k) * r.right + k * r.hintWrong + reviewBonus(g, k) < (stops - k) * r.right + k * r.hintRight);
+    ok(worse, 'grade ' + g + ': a miss plus its review is still worse than getting it right, so missing on purpose never pays');
+    ok(r.wrong + per < 0 && r.hintWrong + per <= 0, 'grade ' + g + ': a reviewed miss never comes out ahead (' + (r.wrong + per) + ' net, ' + (r.hintWrong + per) + ' with a hint)');
+    const smallestFirst = Math.min.apply(null, allCourses().map((c) => c.prizes[0]));
+    ok(reviewBonus(g, stops) < smallestFirst, 'grade ' + g + ': even 6 reviewed mistakes (+' + reviewBonus(g, stops) + ') pay less than winning a race (' + smallestFirst + ')');
 });
 
 const N = 4000;

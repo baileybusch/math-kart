@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getSaveData, updateSaveData } from '../utils/saveManager.js';
 import { getProblemForGrade, getGrade } from '../math/grades.js';
-import { coinDelta, coinRules } from '../math/economy.js';
+import { coinDelta, coinRules, reviewBonus } from '../math/economy.js';
 import { createTrack } from '../game/trackBuilder.js';
 import { pointAt } from '../game/trackMath.js';
 import {
@@ -39,6 +39,10 @@ export default class RaceScene extends Phaser.Scene {
         this.inMathStop = false;
         this.finishOrder = [];
         this.stats = { correct: 0, asked: 0, hints: 0 };
+        // Every Math Stop this race, for the review on the results screen.
+        // Lives only as long as this scene; nothing here is saved.
+        this.stopLog = [];
+        this.reviewClaimed = 0;
         this.shownTips = {};
         this.lastSplash = 0;
         this.hud = null;
@@ -251,6 +255,7 @@ export default class RaceScene extends Phaser.Scene {
             this.stats.asked++;
             if (result.correct) this.stats.correct++;
             if (result.hintUsed) this.stats.hints++;
+            this.stopLog.push({ problem, correct: result.correct, hintUsed: result.hintUsed, given: result.given, delta, lap, star });
             this.coins = Math.max(0, this.coins + delta);
             this.persistCoins();
             return delta;
@@ -264,6 +269,26 @@ export default class RaceScene extends Phaser.Scene {
         const save = getSaveData();
         save.coins = this.coins;
         updateSaveData(save);
+    }
+
+    mistakes() {
+        return this.stopLog.filter((s) => !s.correct);
+    }
+
+    /** Coins the mistake review would pay right now (0 once claimed). */
+    reviewBonusOnOffer() {
+        if (!this.raceFinished || this.reviewClaimed) return 0;
+        return reviewBonus(this.grade, this.mistakes().length);
+    }
+
+    /** Pays the review bonus once, and only after a finished race. */
+    claimReviewBonus() {
+        const bonus = this.reviewBonusOnOffer();
+        if (!bonus) return 0;
+        this.reviewClaimed = bonus;
+        this.coins += bonus;
+        this.persistCoins();
+        return bonus;
     }
 
     finishRace() {

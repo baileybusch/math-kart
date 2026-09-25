@@ -40,7 +40,13 @@ const KEYS = [
 const CLOSE_AFTER_RIGHT = 2600;
 const CLOSE_AFTER_WRONG = 6000;
 
-function fitText(text, maxW, maxH, minSize) {
+/** "x = 15", "7 kg", "Yes"... as shown in the answer box. */
+export function formatAnswer(problem, value) {
+    if (value === undefined || value === null || value === '') return '\u2014';
+    return (X_KINDS[problem.kind] ? 'x = ' : '') + value + (problem.unit ? ' ' + problem.unit : '');
+}
+
+export function fitText(text, maxW, maxH, minSize) {
     let size = parseInt(text.style.fontSize, 10);
     while ((text.width > maxW || text.height > maxH) && size > minSize) {
         size -= 2;
@@ -261,7 +267,8 @@ export function showMathStop(scene, problem, opts, onAnswer, onClose) {
         boardBtn.setLocked(true).setVisible(false);
         closeWhiteboard();
 
-        const delta = onAnswer({ correct, hintUsed: state.hintUsed });
+        const given = typed ? state.typed : (pickedBtn ? pickedBtn.choice : '');
+        const delta = onAnswer({ correct, hintUsed: state.hintUsed, given });
         state.delta = delta;
 
         if (display) {
@@ -278,7 +285,7 @@ export function showMathStop(scene, problem, opts, onAnswer, onClose) {
             }
         });
 
-        const answerText = (X_KINDS[problem.kind] ? 'x = ' : '') + problem.answer + (problem.unit ? ' ' + problem.unit : '');
+        const answerText = formatAnswer(problem, problem.answer);
         if (correct) {
             feedback.setText(state.hintUsed ? 'You got it with a hint!' : 'Great job!');
             feedback.setColor('#2b8a3e');

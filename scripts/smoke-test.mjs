@@ -9,9 +9,10 @@
  *     picks Grade 7, taps START RACE, drives with two fingers, answers math
  *     stops (typed, hint, whiteboard), finishes the race, and unlocks the
  *     track ladder in the shop.
+ *     After the race: review every mistake and collect the review bonus once.
  *   - Every track (same profile): star 1 opens a Math Stop, water slows the
  *     kart but the bridge doesn't, ramps launch it, the finish pays that
- *     track's prize.
+ *     track's prize, and a perfect race says "nothing to review".
  *   - Phone landscape: whole game is visible (it used to be cut off).
  *   - Desktop: boots on WebGL; Grade 3, keyboard answer, mouse whiteboard.
  *   - Broken or missing bundle: the "couldn't start" banner appears.
@@ -146,8 +147,11 @@ const MATH = {
         '0': [652, 544], check: [844, 544]
     }
 };
-// Coin table from src/math/economy.js.
-const COINS = { 3: { right: 6, hintRight: 3, hintWrong: -3, wrong: -6 }, 7: { right: 10, hintRight: 5, hintWrong: -5, wrong: -10 } };
+// Coin table from src/math/economy.js (review: per mistake reviewed).
+const COINS = { 3: { right: 6, hintRight: 3, hintWrong: -3, wrong: -6, review: 3 }, 7: { right: 10, hintRight: 5, hintWrong: -5, wrong: -10, review: 5 } };
+// RESULTS in RaceHudScene.js and REVIEW_LAYOUT in ui/reviewMistakes.js.
+const RESULTS = { review: [512, 394 + 42], raceAgain: [512 - 250, 394 + 226] };
+const REVIEW = { back: [164, 668], whiteboard: [430, 668], next: [790, 668], close: [924, 126] };
 const WATER_SPEED = 0.4;
 
 const mathState = (page) => page.evaluate(() => {
@@ -225,6 +229,67 @@ const inkPixels = (page) => page.evaluate(() => {
     for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n++;
     return n;
 });
+
+const reviewState = (page) => page.evaluate(() => {
+    const hud = window.mathKart.game.scene.getScene('RaceHudScene');
+    const v = hud.review;
+    if (!v) return null;
+    return { index: v.index, total: v.total, mode: v.mode, bonus: v.bonus, canNext: v.canNext, finished: v.finished, closed: v.closed, yours: v.yoursText, right: v.rightText, explain: v.explainText };
+});
+
+/** Results -> Review mistakes -> step through every miss -> bonus paid once. */
+async function reviewMistakes(page) {
+    const info = await race(page, () => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return { coins: r.coins, misses: r.mistakes().map((s) => ({ given: s.given, answer: s.problem.answer })), offer: r.reviewBonusOnOffer(), grade: r.grade };
+    });
+    const n = info.misses.length;
+    const expected = n * COINS[info.grade].review;
+    check(n >= 1 && info.offer === expected, 'results offer a review of ' + n + ' mistake(s) worth +' + info.offer + ' (' + COINS[info.grade].review + ' each)');
+    check(!!(await findHudText(page, 'Review ' + n + ' mistake')), 'results card shows the "Review ' + n + ' mistake(s) +' + expected + '" button');
+    await tapGame(page, RESULTS.review[0], RESULTS.review[1]);
+    await page.waitForFunction(() => { const v = window.mathKart.game.scene.getScene('RaceHudScene').review; return v && !v.closed; }, null, { timeout: 3000 });
+    let st = await reviewState(page);
+    check(st.total === n && st.mode === 'mistakes' && st.index === 0, 'review opens on mistake 1 of ' + n);
+    await tapGame(page, REVIEW.next[0], REVIEW.next[1]);
+    await page.waitForTimeout(150);
+    st = await reviewState(page);
+    check(st.index === 0 && !st.canNext, 'Next stays locked for a moment so the card gets read');
+    await page.waitForTimeout(300);
+    await shot(page, 'ipad-06c-review-card');
+
+    await tapGame(page, REVIEW.whiteboard[0], REVIEW.whiteboard[1]);
+    await page.waitForFunction(() => window.mathKart.whiteboard().open, null, { timeout: 3000 });
+    const done = await page.locator('#mk-wb-done').boundingBox();
+    await page.touchscreen.tap(done.x + done.width / 2, done.y + done.height / 2);
+    await page.waitForFunction(() => !window.mathKart.whiteboard().open, null, { timeout: 3000 });
+    st = await reviewState(page);
+    check(!st.closed && st.index === 0, 'the whiteboard opens from the review and Done returns to the same card');
+
+    for (let i = 0; i < n; i++) {
+        await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').review.canNext, null, { timeout: 4000 });
+        st = await reviewState(page);
+        const m = info.misses[i];
+        check(st.index === i && st.yours.indexOf(m.given || '\u2014') !== -1 && st.right.indexOf(m.answer) !== -1 && st.explain.indexOf('Here\u2019s how') === 0,
+            'mistake ' + (i + 1) + ': shows your answer "' + st.yours + '", the right answer "' + st.right + '" and how to solve it');
+        if (i === n - 1) check(!!(await findHudText(page, 'Done \u2713  +' + expected)), 'last card\u2019s button says "Done \u2713 +' + expected + '"');
+        await tapGame(page, REVIEW.next[0], REVIEW.next[1]);
+        await page.waitForTimeout(120);
+    }
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').review.closed, null, { timeout: 3000 });
+    await page.waitForTimeout(400);
+    const after = await race(page, () => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return { coins: r.coins, claimed: r.reviewClaimed, again: r.claimReviewBonus(), offer: r.reviewBonusOnOffer() };
+    });
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')).coins);
+    check(after.coins === info.coins + expected && after.claimed === expected && saved === after.coins,
+        'finishing the review pays +' + expected + ' once (' + info.coins + ' -> ' + after.coins + ', saved ' + saved + ')');
+    check(after.again === 0 && after.offer === 0, 'the review bonus can\u2019t be collected twice');
+    check(!!(await findHudText(page, '+' + expected + ' for reviewing mistakes')), 'results now say "+' + expected + ' for reviewing mistakes"');
+    check(!!(await findHudText(page, 'Total coins: ' + after.coins)), 'results total includes the review bonus');
+    await shot(page, 'ipad-06d-results-after-review');
+}
 
 /** Water slows the kart, the bridge doesn't, ramps launch it. */
 async function trackFeatures(page, id) {
@@ -481,6 +546,12 @@ async function ipadIos12(browser, baseUrl) {
     await shot(page, 'ipad-05f-wrong');
     await keepRacing(page, tapGame);
     check(true, 'math stop closed and racing resumed');
+    const midRace = await race(page, () => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        const before = r.coins;
+        return { offer: r.reviewBonusOnOffer(), paid: r.claimReviewBonus(), same: r.coins === before, logged: r.stopLog.length };
+    });
+    check(midRace.offer === 0 && midRace.paid === 0 && midRace.same && midRace.logged >= 3, 'no review bonus before the race is finished (' + JSON.stringify(midRace) + ')');
 
     // Fast-forward to the finish: mark every star done and cross the line.
     await race(page, () => {
@@ -495,15 +566,20 @@ async function ipadIos12(browser, baseUrl) {
     check(true, 'crossing the line on the last lap finishes the race');
     await page.waitForTimeout(500);
     await shot(page, 'ipad-06-results');
+    await reviewMistakes(page);
 
-    await tapGame(page, 512 - 250, 384 + 10 + 185);
+    await tapGame(page, RESULTS.raceAgain[0], RESULTS.raceAgain[1]);
     await page.waitForFunction(() => {
         const r = window.mathKart.game.scene.getScene('RaceScene');
         const hud = window.mathKart.game.scene.getScene('RaceHudScene');
         return r.sys.isActive() && hud.sys.isActive() && r.hud === hud && r.raceStarted && !r.raceFinished && r.lap === 0;
     }, null, { timeout: 8000 });
     check(true, '"Race Again" starts a fresh race with a working HUD');
-
+    const fresh = await race(page, () => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return { log: r.stopLog.length, claimed: r.reviewClaimed };
+    });
+    check(fresh.log === 0 && fresh.claimed === 0, 'the new race starts with an empty review log (' + JSON.stringify(fresh) + ')');
 
     await tapGame(page, 962, 46);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceScene').menuPaused === true, null, { timeout: 3000 });
@@ -645,7 +721,11 @@ async function allTracks(browser, baseUrl) {
         const prize = course.prizes[end.position - 1];
         check(answered.correct === true && end.coins - before.coins === prize,
             course.id + ': star 1 opened a Math Stop (answered right), finishing ' + end.position + ' paid ' + (end.coins - before.coins) + ' (expected ' + prize + ')');
-
+        await page.waitForTimeout(350);
+        const perfect = await findHudText(page, 'Perfect');
+        const offer = await race(page, () => window.mathKart.game.scene.getScene('RaceScene').reviewBonusOnOffer());
+        check(!!perfect && offer === 0, course.id + ': no mistakes, so the results say "' + perfect + '" and offer no review bonus');
+        if (course.id === 'forest') await shot(page, 'results-perfect');
     }
     check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
