@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 /**
  * Math Problem Pack System
  * 
@@ -341,6 +343,13 @@ export function getRandomProblem(packId) {
     }
     
     return pack.generateProblem();
+}
+
+/**
+ * Get a problem from a randomly chosen pack
+ */
+export function getMixedProblem() {
+    return getRandomProblem(Phaser.Utils.Array.GetRandom(Object.keys(PACKS)));
 }
 
 /**

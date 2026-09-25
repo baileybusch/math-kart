@@ -1,17 +1,27 @@
 {
   "name": "math-kart",
   "version": "1.0.0",
-  "description": "Mario Kart-style math racing game for 3rd graders",
+  "description": "Kart racing math game for 3rd graders (targets old iPad mini / iOS 12 Safari)",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:legacy": "node scripts/check-legacy-bundle.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test": "npm run build && npm run check:legacy && npm run test:smoke"
   },
   "dependencies": {
     "phaser": "^3.80.1"
   },
   "devDependencies": {
+    "@vitejs/plugin-legacy": "^5.4.3",
+    "acorn": "^8.18.0",
+    "playwright-core": "^1.63.0",
+    "terser": "^5.51.2",
     "vite": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

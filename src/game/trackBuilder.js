@@ -1,202 +1,189 @@
+import Phaser from 'phaser';
+import { buildLoop, pointAt, distanceToLoop } from './trackMath.js';
+import { FONT, COLORS } from '../ui/theme.js';
+
 /**
- * Track Builder - Creates racing tracks with checkpoints
+ * Track Builder - draws a course from a closed loop of waypoints. The same
+ * loop drives the road art, AI karts, checkpoints and race progress.
+ *
+ * Only Graphics primitives are used so the Canvas renderer (old iPads) and
+ * WebGL look the same.
  */
 
+export const ROAD_WIDTH = 190;
+
+const COURSES = {
+    forest: {
+        name: 'Forest Loop',
+        width: 2400,
+        height: 1600,
+        ground: 0x5cc85c,
+        road: 0x8d7b68,
+        edge: 0xf1e3c8,
+        checkpointIndexes: [4, 8, 13],
+        points: [
+            [320, 520], [320, 900], [400, 1170], [640, 1320], [1000, 1340],
+            [1380, 1240], [1740, 1320], [2040, 1230], [2150, 980], [2100, 690],
+            [1960, 400], [1660, 270], [1300, 330], [1010, 470], [720, 330], [450, 300]
+        ],
+        decorate: decorateForest
+    },
+    desert: {
+        name: 'Desert Canyon',
+        width: 2400,
+        height: 1600,
+        ground: 0xf2d49b,
+        road: 0xb08968,
+        edge: 0xfff3d6,
+        checkpointIndexes: [4, 9, 14],
+        points: [
+            [360, 420], [360, 800], [440, 1140], [720, 1320], [1060, 1260],
+            [1240, 1010], [1440, 820], [1760, 860], [1960, 1100], [2170, 1250],
+            [2260, 960], [2210, 620], [2020, 340], [1660, 260], [1310, 390],
+            [1010, 560], [730, 430], [540, 270]
+        ],
+        decorate: decorateDesert
+    }
+};
+
+export function getCourseInfo(courseId) {
+    const c = COURSES[courseId] || COURSES.forest;
+    return { id: COURSES[courseId] ? courseId : 'forest', name: c.name };
+}
+
 export function createTrack(scene, courseId) {
-    const tracks = {
-        forest: createForestTrack,
-        desert: createDesertTrack
-    };
-    
-    const builder = tracks[courseId] || createForestTrack;
-    return builder(scene);
-}
+    const course = COURSES[courseId] || COURSES.forest;
+    const points = course.points.map(([x, y]) => ({ x, y }));
+    const loop = buildLoop(points);
+    const rng = new Phaser.Math.RandomDataGenerator([courseId || 'forest']);
 
-function createForestTrack(scene) {
-    const width = 2400;
-    const height = 1600;
-    
-    // Background - grass
-    scene.add.rectangle(width / 2, height / 2, width, height, 0x228B22);
-    
-    // Trees for decoration
-    for (let i = 0; i < 30; i++) {
-        const x = Phaser.Math.Between(50, width - 50);
-        const y = Phaser.Math.Between(50, height - 50);
-        const size = Phaser.Math.Between(40, 80);
-        scene.add.circle(x, y, size, 0x006400);
-    }
-    
-    // Track path (dirt/road)
-    const graphics = scene.add.graphics();
-    graphics.lineStyle(200, 0x8B7355, 1);
-    
-    // Oval track
-    const path = new Phaser.Curves.Path(200, 300);
-    path.lineTo(200, 800);
-    path.ellipseTo(300, 300, 180, 360, false, 0);
-    path.lineTo(2200, 1100);
-    path.ellipseTo(300, 300, 0, 180, false, 0);
-    path.lineTo(2200, 500);
-    path.ellipseTo(300, 300, 180, 360, false, 0);
-    path.lineTo(200, 800);
-    path.ellipseTo(300, 300, 0, 180, false, 0);
-    path.lineTo(200, 300);
-    
-    path.draw(graphics);
-    
-    // Start line
-    scene.add.rectangle(200, 300, 150, 20, 0xFFFFFF);
-    scene.add.text(200, 280, '🏁 START', {
-        fontSize: '32px',
-        fontFamily: 'Arial',
-        color: '#000000',
-        backgroundColor: '#FFFFFF',
-        padding: { x: 10, y: 5 }
-    }).setOrigin(0.5);
-    
-    // Checkpoints
-    const checkpoints = [
-        { x: 1200, y: 1100, label: '1' },
-        { x: 2200, y: 800, label: '2' },
-        { x: 1200, y: 500, label: '3' }
-    ];
-    
-    checkpoints.forEach(cp => {
-        scene.add.circle(cp.x, cp.y, 60, 0xFFFF00, 0.3)
-            .setStrokeStyle(4, 0xFFD700);
-        scene.add.text(cp.x, cp.y, `✓${cp.label}`, {
-            fontSize: '36px',
-            fontFamily: 'Arial',
-            color: '#000000',
-            stroke: '#FFFF00',
-            strokeThickness: 4
-        }).setOrigin(0.5);
+    scene.cameras.main.setBackgroundColor(course.ground);
+
+    const decor = scene.add.graphics();
+    course.decorate(decor, rng, course, loop);
+
+    const road = scene.add.graphics();
+    drawRoadLayer(road, points, ROAD_WIDTH + 26, course.edge);
+    drawRoadLayer(road, points, ROAD_WIDTH, course.road);
+
+    drawStartLine(scene, loop);
+
+    const checkpoints = course.checkpointIndexes.map((index, i) => {
+        const p = points[index];
+        const cp = {
+            x: p.x,
+            y: p.y,
+            along: loop.segs[index].start,
+            label: String(i + 1)
+        };
+        cp.marker = drawCheckpoint(scene, cp);
+        return cp;
     });
-    
-    // AI path waypoints
-    const aiPath = [
-        { x: 200, y: 300 },
-        { x: 200, y: 600 },
-        { x: 300, y: 900 },
-        { x: 700, y: 1100 },
-        { x: 1200, y: 1100 },
-        { x: 1800, y: 1100 },
-        { x: 2100, y: 1000 },
-        { x: 2200, y: 800 },
-        { x: 2200, y: 600 },
-        { x: 2100, y: 400 },
-        { x: 1800, y: 500 },
-        { x: 1200, y: 500 },
-        { x: 600, y: 500 },
-        { x: 300, y: 400 },
-        { x: 200, y: 300 }
-    ];
-    
+
     return {
-        width,
-        height,
+        id: courseId,
+        name: course.name,
+        width: course.width,
+        height: course.height,
+        loop,
         checkpoints,
-        path: aiPath,
-        startX: 200,
-        startY: 300
+        roadHalfWidth: ROAD_WIDTH / 2
     };
 }
 
-function createDesertTrack(scene) {
-    const width = 2400;
-    const height = 1600;
-    
-    // Background - sand
-    scene.add.rectangle(width / 2, height / 2, width, height, 0xEDC9AF);
-    
-    // Cacti for decoration
-    for (let i = 0; i < 25; i++) {
-        const x = Phaser.Math.Between(50, width - 50);
-        const y = Phaser.Math.Between(50, height - 50);
-        const size = Phaser.Math.Between(30, 60);
-        scene.add.rectangle(x, y, size * 0.6, size, 0x228B22);
+function drawRoadLayer(g, points, width, color) {
+    g.lineStyle(width, color, 1);
+    g.beginPath();
+    g.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y);
+    g.closePath();
+    g.strokePath();
+    g.fillStyle(color, 1);
+    points.forEach((p) => g.fillCircle(p.x, p.y, width / 2));
+}
+
+function drawStartLine(scene, loop) {
+    const p = pointAt(loop, 0);
+    const g = scene.add.graphics({ x: p.x, y: p.y });
+    const size = 24;
+    const cols = Math.ceil(ROAD_WIDTH / size);
+    for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < cols; col++) {
+            g.fillStyle((row + col) % 2 === 0 ? 0xffffff : 0x212529, 1);
+            g.fillRect(-(cols * size) / 2 + col * size, -size + row * size, size, size);
+        }
     }
-    
-    // Track path
-    const graphics = scene.add.graphics();
-    graphics.lineStyle(200, 0xA0826D, 1);
-    
-    // Figure-8 style track
-    const path = new Phaser.Curves.Path(300, 400);
-    path.lineTo(300, 800);
-    path.ellipseTo(200, 200, 180, 360, false, 0);
-    path.lineTo(900, 1000);
-    path.lineTo(1500, 800);
-    path.ellipseTo(200, 200, 0, 180, false, 0);
-    path.lineTo(2100, 600);
-    path.lineTo(2100, 400);
-    path.ellipseTo(200, 200, 180, 360, false, 0);
-    path.lineTo(1500, 200);
-    path.lineTo(900, 400);
-    path.ellipseTo(200, 200, 0, 180, false, 0);
-    path.lineTo(300, 400);
-    
-    path.draw(graphics);
-    
-    // Start line
-    scene.add.rectangle(300, 400, 150, 20, 0xFFFFFF);
-    scene.add.text(300, 380, '🏁 START', {
-        fontSize: '32px',
-        fontFamily: 'Arial',
-        color: '#000000',
-        backgroundColor: '#FFFFFF',
-        padding: { x: 10, y: 5 }
+    g.rotation = Math.atan2(p.dirY, p.dirX) + Math.PI / 2;
+}
+
+function drawCheckpoint(scene, cp) {
+    const container = scene.add.container(cp.x, cp.y);
+    const ring = scene.add.circle(0, 0, 78, COLORS.yellow, 0.35).setStrokeStyle(8, COLORS.white, 0.95);
+    const star = scene.add.star(0, 0, 5, 26, 56, COLORS.yellow).setStrokeStyle(5, COLORS.ink);
+    const label = scene.add.text(0, 4, cp.label, {
+        fontFamily: FONT,
+        fontSize: '34px',
+        fontStyle: 'bold',
+        color: '#1d2b53'
     }).setOrigin(0.5);
-    
-    // Checkpoints
-    const checkpoints = [
-        { x: 900, y: 1000, label: '1' },
-        { x: 2100, y: 600, label: '2' },
-        { x: 900, y: 400, label: '3' }
-    ];
-    
-    checkpoints.forEach(cp => {
-        scene.add.circle(cp.x, cp.y, 60, 0xFFFF00, 0.3)
-            .setStrokeStyle(4, 0xFFD700);
-        scene.add.text(cp.x, cp.y, `✓${cp.label}`, {
-            fontSize: '36px',
-            fontFamily: 'Arial',
-            color: '#000000',
-            stroke: '#FFFF00',
-            strokeThickness: 4
-        }).setOrigin(0.5);
+    container.add([ring, star, label]);
+    scene.tweens.add({
+        targets: ring,
+        scale: 1.15,
+        duration: 600,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
     });
-    
-    // AI path waypoints
-    const aiPath = [
-        { x: 300, y: 400 },
-        { x: 300, y: 700 },
-        { x: 400, y: 950 },
-        { x: 700, y: 1050 },
-        { x: 900, y: 1000 },
-        { x: 1200, y: 900 },
-        { x: 1500, y: 800 },
-        { x: 1800, y: 700 },
-        { x: 2000, y: 600 },
-        { x: 2100, y: 500 },
-        { x: 2100, y: 350 },
-        { x: 2000, y: 250 },
-        { x: 1700, y: 200 },
-        { x: 1500, y: 200 },
-        { x: 1200, y: 250 },
-        { x: 900, y: 350 },
-        { x: 700, y: 450 },
-        { x: 500, y: 450 },
-        { x: 350, y: 400 }
-    ];
-    
-    return {
-        width,
-        height,
-        checkpoints,
-        path: aiPath,
-        startX: 300,
-        startY: 400
-    };
+    return { container, ring, star };
+}
+
+function scatter(rng, course, loop, count, clearance, draw) {
+    let placed = 0;
+    let tries = 0;
+    while (placed < count && tries < count * 20) {
+        tries++;
+        const x = rng.between(60, course.width - 60);
+        const y = rng.between(60, course.height - 60);
+        if (distanceToLoop(loop, x, y) < ROAD_WIDTH / 2 + clearance) continue;
+        draw(x, y);
+        placed++;
+    }
+}
+
+function decorateForest(g, rng, course, loop) {
+    scatter(rng, course, loop, 40, 18, (x, y) => {
+        g.fillStyle(0xffffff, 0.5);
+        g.fillCircle(x, y, 4);
+        g.fillStyle([0xff6b6b, 0xffd43b, 0xcc5de8][rng.between(0, 2)], 1);
+        g.fillCircle(x, y, 3);
+    });
+    scatter(rng, course, loop, 34, 70, (x, y) => {
+        const r = rng.between(34, 56);
+        g.fillStyle(0x000000, 0.15);
+        g.fillCircle(x + 8, y + 10, r);
+        g.fillStyle(0x2b8a3e, 1);
+        g.fillCircle(x, y, r);
+        g.fillStyle(0x40c057, 1);
+        g.fillCircle(x - r * 0.25, y - r * 0.25, r * 0.6);
+    });
+}
+
+function decorateDesert(g, rng, course, loop) {
+    scatter(rng, course, loop, 26, 30, (x, y) => {
+        const r = rng.between(14, 30);
+        g.fillStyle(0xc9a26b, 1);
+        g.fillEllipse(x, y, r * 2.2, r * 1.5);
+    });
+    scatter(rng, course, loop, 26, 60, (x, y) => {
+        const h = rng.between(50, 80);
+        g.fillStyle(0x000000, 0.12);
+        g.fillEllipse(x + 10, y + h / 2, 40, 16);
+        g.fillStyle(0x2f9e44, 1);
+        g.fillRoundedRect(x - 10, y - h / 2, 20, h, 10);
+        g.fillRoundedRect(x - 28, y - 8, 14, 26, 7);
+        g.fillRoundedRect(x + 14, y - 20, 14, 26, 7);
+        g.fillRect(x - 20, y + 10, 12, 8);
+        g.fillRect(x + 8, y - 2, 12, 8);
+    });
 }
