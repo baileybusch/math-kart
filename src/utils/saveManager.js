@@ -1,3 +1,5 @@
+import { isGrade, DEFAULT_GRADE } from '../math/grades.js';
+
 const SAVE_KEY = 'mathKartSave';
 
 const DEFAULT_SAVE = {
@@ -8,7 +10,8 @@ const DEFAULT_SAVE = {
     speedUpgrades: 0,
     handlingUpgrades: 0,
     difficulty: 1,
-    lastCourse: 'forest'
+    lastCourse: 'forest',
+    grade: DEFAULT_GRADE
 };
 
 // iOS 12 Safari throws on localStorage.setItem in Private Browsing, so keep an
@@ -67,6 +70,8 @@ function sanitize(raw) {
     if (typeof raw.lastCourse === 'string' && data.unlockedCourses.indexOf(raw.lastCourse) !== -1) {
         data.lastCourse = raw.lastCourse;
     }
+    const grade = Number(raw.grade);
+    if (isGrade(grade)) data.grade = grade;
     return data;
 }
 

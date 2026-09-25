@@ -4,10 +4,11 @@ import {
     createButton, createCoinPill, ordinal
 } from '../ui/theme.js';
 import { LAPS } from './RaceScene.js';
+import { showMathStop } from '../ui/mathStop.js';
+import { closeWhiteboard } from '../ui/whiteboard.js';
 
 const W = GAME_WIDTH;
 const H = GAME_HEIGHT;
-const ANSWER_COLORS = [COLORS.blue, COLORS.orange, COLORS.purple];
 const MEDAL_COLORS = [0xffd43b, 0xdee2e6, 0xe8a060];
 
 /**
@@ -28,10 +29,13 @@ export default class RaceHudScene extends Phaser.Scene {
         this.race.hud = this;
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
             if (this.race && this.race.hud === this) this.race.hud = null;
+            closeWhiteboard();
         });
 
         this.controls = { left: false, right: false, forward: false, backward: false };
         this.modalOpen = false;
+        this.whiteboardOpen = false;
+        this.math = null;
         this.lastCoins = null;
         this.lastPosition = null;
 
@@ -211,75 +215,8 @@ export default class RaceHudScene extends Phaser.Scene {
         });
     }
 
-    showMathProblem(problem, subtitle, onAnswer, onClose) {
-        const layer = this.openModal(100);
-        const panel = this.add.container(W / 2, H / 2 + 20);
-        layer.add(panel);
-
-        const g = this.add.graphics();
-        drawPanel(g, -390, -260, 780, 500, COLORS.white, 34);
-        drawPanel(g, -200, -300, 400, 76, COLORS.yellow, 38);
-        panel.add(g);
-        panel.add(this.add.text(0, -264, 'MATH STOP!', textStyle(40, INK)).setOrigin(0.5));
-        panel.add(this.add.text(0, -195, subtitle, textStyle(24, '#868e96')).setOrigin(0.5));
-
-        const question = this.add.text(0, -115, problem.question, textStyle(72, INK)).setOrigin(0.5);
-        let size = 72;
-        while (question.width > 700 && size > 40) {
-            size -= 4;
-            question.setFontSize(size + 'px');
-        }
-        panel.add(question);
-
-        const feedback = this.add.text(0, 190, 'Tap the right answer!', textStyle(30, '#495057')).setOrigin(0.5);
-        panel.add(feedback);
-
-        let answered = false;
-        const buttons = problem.choices.map((choice, i) => {
-            const btn = createButton(this, (i - 1) * 245, 50, {
-                width: 220, height: 140, radius: 30,
-                label: choice,
-                fontSize: choice.length > 4 ? 44 : 60,
-                color: ANSWER_COLORS[i % ANSWER_COLORS.length],
-                onTap: () => {
-                    if (answered) return;
-                    answered = true;
-                    pick(choice, btn);
-                }
-            });
-            btn.choice = choice;
-            panel.add(btn);
-            return btn;
-        });
-
-        const pick = (choice, btn) => {
-            const correct = choice === problem.answer;
-            buttons.forEach((b) => b.setLocked(true));
-            onAnswer(correct);
-
-            if (correct) {
-                btn.setColor(COLORS.green);
-                feedback.setText('Great job! +5 coins');
-                feedback.setColor('#2b8a3e');
-                this.tweens.add({ targets: btn, scale: 1.12, duration: 160, yoyo: true, repeat: 1 });
-                this.burstStars(panel, btn.x, btn.y);
-            } else {
-                btn.setColor(COLORS.red);
-                buttons.forEach((b) => {
-                    if (b.choice === problem.answer) {
-                        b.setColor(COLORS.green);
-                        this.tweens.add({ targets: b, scale: 1.1, duration: 220, yoyo: true, repeat: 2 });
-                    }
-                });
-                feedback.setText('Nice try! The answer is ' + problem.answer + '.  (-2 coins)');
-                feedback.setColor('#c92a2a');
-            }
-
-            this.time.delayedCall(correct ? 1300 : 2800, () => this.closeModal(layer, onClose));
-        };
-
-        panel.setScale(0.8);
-        this.tweens.add({ targets: panel, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    showMathProblem(problem, opts, onAnswer, onClose) {
+        return showMathStop(this, problem, opts, onAnswer, onClose);
     }
 
     burstStars(parent, x, y) {
@@ -334,7 +271,9 @@ export default class RaceHudScene extends Phaser.Scene {
         panel.add(addTitle(this, 0, -100, headline, 64));
 
         panel.add(this.add.text(0, -20, '+' + result.prize + ' prize coins', textStyle(36, '#e67700')).setOrigin(0.5));
-        const mathLine = 'Math: ' + result.stats.correct + ' of ' + result.stats.asked + ' right';
+        const hints = result.stats.hints;
+        const mathLine = 'Math: ' + result.stats.correct + ' of ' + result.stats.asked + ' right' +
+            (hints ? '  (' + hints + (hints === 1 ? ' hint)' : ' hints)') : '');
         panel.add(this.add.text(0, 30, mathLine, textStyle(32, INK)).setOrigin(0.5));
         panel.add(this.add.text(0, 76, 'Total coins: ' + result.coins, textStyle(28, '#495057')).setOrigin(0.5));
 
