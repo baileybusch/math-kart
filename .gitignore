@@ -24,3 +24,6 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Smoke test output
+smoke-screenshots/
