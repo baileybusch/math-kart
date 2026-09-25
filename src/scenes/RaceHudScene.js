@@ -223,10 +223,12 @@ export default class RaceHudScene extends Phaser.Scene {
         panel.add(this.add.text(0, -264, 'MATH STOP!', textStyle(40, INK)).setOrigin(0.5));
         panel.add(this.add.text(0, -195, subtitle, textStyle(24, '#868e96')).setOrigin(0.5));
 
-        const question = this.add.text(0, -110, problem.question, textStyle(70, INK, {
-            wordWrap: { width: 720 }
-        })).setOrigin(0.5);
-        if (question.width > 720) question.setFontSize(52);
+        const question = this.add.text(0, -115, problem.question, textStyle(72, INK)).setOrigin(0.5);
+        let size = 72;
+        while (question.width > 700 && size > 40) {
+            size -= 4;
+            question.setFontSize(size + 'px');
+        }
         panel.add(question);
 
         const feedback = this.add.text(0, 190, 'Tap the right answer!', textStyle(30, '#495057')).setOrigin(0.5);

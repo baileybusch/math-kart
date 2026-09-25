@@ -51,10 +51,10 @@ export default class RaceScene extends Phaser.Scene {
         this.arrow.fillStyle(COLORS.yellow, 1);
         this.arrow.lineStyle(5, COLORS.ink, 1);
         this.arrow.beginPath();
-        this.arrow.moveTo(0, -26);
-        this.arrow.lineTo(20, 12);
+        this.arrow.moveTo(0, -42);
+        this.arrow.lineTo(32, 18);
         this.arrow.lineTo(0, 4);
-        this.arrow.lineTo(-20, 12);
+        this.arrow.lineTo(-32, 18);
         this.arrow.closePath();
         this.arrow.fillPath();
         this.arrow.strokePath();
@@ -275,8 +275,8 @@ export default class RaceScene extends Phaser.Scene {
         this.arrow.setVisible(show);
         if (!show) return;
         const angle = Math.atan2(dy, dx);
-        this.arrow.x = kart.x + Math.cos(angle) * 95;
-        this.arrow.y = kart.y + Math.sin(angle) * 95;
+        this.arrow.x = kart.x + Math.cos(angle) * 115;
+        this.arrow.y = kart.y + Math.sin(angle) * 115;
         this.arrow.rotation = angle + Math.PI / 2;
         this.arrow.setDepth(6);
     }

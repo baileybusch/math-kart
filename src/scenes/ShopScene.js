@@ -150,8 +150,9 @@ export default class ShopScene extends Phaser.Scene {
         g.fillRoundedRect(x + 132, y + 76, 16, 48, 8);
         g.fillRoundedRect(x + 116, y + 90, 12, 22, 6);
 
-        this.add.text(x + 290, y + 64, 'New Track: Desert Canyon', textStyle(34, INK, { align: 'left' })).setOrigin(0, 0.5);
-        this.add.text(x + 290, y + 110, 'A twisty sandy race with cactus!', textStyle(22, '#868e96', { align: 'left' })).setOrigin(0, 0.5);
+        this.add.text(x + 290, y + 58, 'NEW TRACK', textStyle(22, '#e67700', { align: 'left' })).setOrigin(0, 0.5);
+        this.add.text(x + 290, y + 98, 'Desert Canyon', textStyle(38, INK, { align: 'left' })).setOrigin(0, 0.5);
+        this.add.text(x + 290, y + 142, 'Twisty sand roads and cactus!', textStyle(22, '#868e96', { align: 'left' })).setOrigin(0, 0.5);
 
         const unlocked = this.save.unlockedCourses.indexOf('desert') !== -1;
         const affordable = this.save.coins >= DESERT_COST;

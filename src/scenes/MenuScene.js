@@ -61,7 +61,7 @@ export default class MenuScene extends Phaser.Scene {
         g.fillStyle(COLORS.sky, 1);
         g.fillRect(0, 0, W, 768);
         g.fillStyle(0xffffff, 0.9);
-        [[90, 90, 1], [790, 150, 0.8], [330, 240, 0.55]].forEach(([cx, cy, s]) => {
+        [[70, 190, 0.9], [800, 150, 0.8]].forEach(([cx, cy, s]) => {
             g.fillCircle(cx, cy, 34 * s);
             g.fillCircle(cx + 38 * s, cy - 14 * s, 42 * s);
             g.fillCircle(cx + 80 * s, cy, 32 * s);
