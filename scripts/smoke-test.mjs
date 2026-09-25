@@ -170,6 +170,7 @@ async function typeOnKeypad(page, ui, text) {
 }
 
 async function closeMathStop(page) {
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').mathUi.contReady === true, null, { timeout: 3000 });
     const ui = await mathUi(page);
     await tapGame(page, ui.cont.x, ui.cont.y);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === false, null, { timeout: 3000 });
@@ -376,6 +377,8 @@ async function grade7(page) {
     await shot(page, 'ipad-10-g7-hint-right');
     let st = await raceState(page);
     ui = await mathUi(page);
+    check(await page.evaluate(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen) && !ui.closed,
+        'double-tapped CHECK keeps the feedback on screen (KEEP RACING ignores the 2nd tap)');
     check(st.grade === 7 && st.asked === 1 && st.correct === 1 && st.hints === 1, 'right after hint counted once (' + JSON.stringify(st) + ')');
     check(st.coins === 40 + COINS.rightWithHint && ui.result.delta === COINS.rightWithHint,
         'hint then right = +' + COINS.rightWithHint + ' (half coins): 40 -> ' + st.coins);

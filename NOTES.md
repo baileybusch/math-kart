@@ -14,7 +14,9 @@ keypad (0-9, `.`, `/` for fractions, ← backspace, CLEAR) and a **CHECK**
 button. Roughly half of Grade 3 problems are typed. In Grade 7 the YES/NO
 "are these similar?" questions use buttons and every find-x, word and scale
 problem is typed (about 70% of Grade 7 overall). Each Math Stop scores once:
-extra taps on CHECK or answer buttons are ignored.
+extra taps on CHECK or answer buttons are ignored, and KEEP RACING (which
+appears where CHECK was) ignores taps for the first 0.8 s so a double-tap
+can't skip the feedback.
 
 **Hints.** The **SHOW HINT** button reveals one useful step, e.g.
 "Scale factor = 20 ÷ 8 = 2.5. Multiply the other small side by it." or

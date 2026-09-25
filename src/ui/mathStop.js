@@ -9,6 +9,7 @@ const LX = -240;
 const RX = 250;
 const COL_W = 440;
 const ANSWER_COLORS = [COLORS.blue, COLORS.orange, COLORS.purple];
+const CONTINUE_DELAY = 800;
 
 const KEY_ROWS = [
     ['7', '8', '9', 'back'],
@@ -51,7 +52,8 @@ export function openMathStop(scene, problem, opts) {
         choices: [],
         check: null,
         hint: null,
-        cont: null
+        cont: null,
+        contReady: false
     };
     scene.mathUi = ui;
     const at = (x, y) => ({ x: CX + x, y: CY + y });
@@ -278,6 +280,12 @@ export function openMathStop(scene, problem, opts) {
         });
         panel.add(cont);
         ui.cont = at(RX, 262);
+        // It sits where CHECK was: a double-tapped CHECK must not skip the feedback.
+        cont.setLocked(true);
+        scene.time.delayedCall(CONTINUE_DELAY, () => {
+            cont.setLocked(false);
+            ui.contReady = true;
+        });
 
         scene.time.delayedCall(correct ? 2600 : 7000, () => close());
     }
@@ -286,7 +294,7 @@ export function openMathStop(scene, problem, opts) {
     const kb = scene.input.keyboard;
     function onKey(ev) {
         if (ui.answered) {
-            if (ev.key === 'Enter') close();
+            if (ev.key === 'Enter' && ui.contReady) close();
             return;
         }
         if (problem.input === 'number') {
