@@ -122,6 +122,98 @@ const activeScenes = (page) => page.evaluate(() =>
 
 const race = (page, fn) => page.evaluate(fn);
 
+// Game-space positions (see MENU_LAYOUT in MenuScene.js and MATH_LAYOUT in
+// ui/mathStop.js).
+const MENU = { grade3: [342, 214], grade7: [682, 214], start: [512, 612], shop: [512, 714] };
+const MATH = {
+    hint: [174, 630], whiteboard: [454, 630], keepRacing: [314, 630],
+    choiceX: 796, choiceRows2: [260, 420], choiceRows3: [222, 342, 462],
+    keys: {
+        '7': [652, 292], '8': [748, 292], '9': [844, 292], del: [940, 292],
+        '4': [652, 376], '5': [748, 376], '6': [844, 376], '/': [940, 376],
+        '1': [652, 460], '2': [748, 460], '3': [844, 460], '.': [940, 460],
+        '0': [652, 544], check: [844, 544]
+    }
+};
+// Coin table from src/math/economy.js.
+const COINS = { 3: { right: 6, hintRight: 3, hintWrong: -3, wrong: -6 }, 7: { right: 10, hintRight: 5, hintWrong: -5, wrong: -10 } };
+
+const mathState = (page) => page.evaluate(() => {
+    const m = window.mathKart.game.scene.getScene('RaceHudScene').math;
+    if (!m) return null;
+    return {
+        question: m.problem.question, answer: m.problem.answer, mode: m.problem.mode, choices: m.problem.choices || null,
+        grade: m.problem.grade, kind: m.problem.kind || m.problem.packId, typed: m.typed, hintUsed: m.hintUsed,
+        answered: m.answered, correct: m.correct, delta: m.delta, closed: m.closed, whiteboardOpens: m.whiteboardOpens
+    };
+});
+
+const raceStats = (page) => race(page, () => {
+    const r = window.mathKart.game.scene.getScene('RaceScene');
+    return { coins: r.coins, asked: r.stats.asked, correct: r.stats.correct, hints: r.stats.hints };
+});
+
+async function openMathStop(page) {
+    await race(page, () => window.mathKart.game.scene.getScene('RaceScene').showMathStop());
+    await page.waitForFunction(() => {
+        const hud = window.mathKart.game.scene.getScene('RaceHudScene');
+        return hud.modalOpen && hud.math && !hud.math.closed;
+    }, null, { timeout: 5000 });
+    await page.waitForTimeout(250);
+    return mathState(page);
+}
+
+async function keepRacing(page, tap) {
+    await page.waitForTimeout(450);
+    await tap(page, MATH.keepRacing[0], MATH.keepRacing[1]);
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === false, null, { timeout: 3000 });
+}
+
+async function typeOnKeypad(page, text, tap) {
+    for (const ch of text) {
+        const k = MATH.keys[ch];
+        await tap(page, k[0], k[1]);
+        await page.waitForTimeout(40);
+    }
+}
+
+function choicePos(state, choice) {
+    const rows = state.choices.length === 2 ? MATH.choiceRows2 : MATH.choiceRows3;
+    return [MATH.choiceX, rows[state.choices.indexOf(choice)]];
+}
+
+/** Opens Math Stops (answering the others correctly) until a typed one shows up. */
+async function nextTypedStop(page, tap) {
+    for (let i = 0; i < 15; i++) {
+        const s = await openMathStop(page);
+        if (s.mode === 'typed') return s;
+        const p = choicePos(s, s.answer);
+        await tap(page, p[0], p[1]);
+        await keepRacing(page, tap);
+    }
+    throw new Error('no typed Math Stop after 15 tries');
+}
+
+const findHudText = (page, needle) => page.evaluate((needle) => {
+    const hud = window.mathKart.game.scene.getScene('RaceHudScene');
+    const walk = (list) => {
+        for (const o of list) {
+            if (o.type === 'Text' && o.text.indexOf(needle) !== -1) return o.text;
+            if (o.list) { const t = walk(o.list); if (t) return t; }
+        }
+        return null;
+    };
+    return walk(hud.children.list);
+}, needle);
+
+const inkPixels = (page) => page.evaluate(() => {
+    const c = document.getElementById('mk-wb-canvas');
+    const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n++;
+    return n;
+});
+
 async function ipadIos12(browser, baseUrl) {
     console.log('\n[iPad mini / iOS 12 profile]');
     const context = await browser.newContext({
@@ -147,7 +239,13 @@ async function ipadIos12(browser, baseUrl) {
     await page.waitForTimeout(400);
     await shot(page, 'ipad-01-menu');
 
-    await tapGame(page, 512, 568);
+    await tapGame(page, MENU.grade7[0], MENU.grade7[1]);
+    await page.waitForTimeout(250);
+    const gradeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')));
+    check(gradeSave && gradeSave.grade === 7, 'tapping Grade 7 selects and saves it (grade=' + (gradeSave && gradeSave.grade) + ')');
+    await shot(page, 'ipad-01b-grade7');
+
+    await tapGame(page, MENU.start[0], MENU.start[1]);
     await page.waitForFunction(() => {
         const hud = window.mathKart.game.scene.getScene('RaceHudScene');
         return hud && hud.sys.isActive() && hud.race && hud.race.raceStarted;
@@ -213,20 +311,112 @@ async function ipadIos12(browser, baseUrl) {
     await page.waitForTimeout(350);
     await shot(page, 'ipad-04-math-stop');
 
-    const coinsBefore = await race(page, () => window.mathKart.game.scene.getScene('RaceScene').coins);
-    await tapGame(page, 512 - 245, 454);
-    await page.waitForTimeout(300);
-    await tapGame(page, 512, 454);
-    await page.waitForTimeout(300);
+    const first = await mathState(page);
+    check(first && first.grade === 7, 'Grade 7 problem at the star (' + (first && first.kind) + ', ' + (first && first.mode) + ')');
+    const coinsBefore = (await raceStats(page)).coins;
+    if (first.mode === 'typed') {
+        await typeOnKeypad(page, '1', tapGame);
+        await tapGame(page, MATH.keys.check[0], MATH.keys.check[1]);
+        await tapGame(page, MATH.keys.check[0], MATH.keys.check[1]);
+    } else {
+        const a = choicePos(first, first.choices[0]);
+        const b = choicePos(first, first.choices[1]);
+        await tapGame(page, a[0], a[1]);
+        await tapGame(page, b[0], b[1]);
+    }
+    await page.waitForTimeout(400);
     await shot(page, 'ipad-05-answered');
-    const after = await race(page, () => {
-        const r = window.mathKart.game.scene.getScene('RaceScene');
-        return { coins: r.coins, asked: r.stats.asked, correct: r.stats.correct };
-    });
+    const after = await raceStats(page);
     check(after.asked === 1, 'exactly one answer counted even after tapping twice (asked=' + after.asked + ')');
-    const expected = after.correct ? coinsBefore + 5 : Math.max(0, coinsBefore - 2);
-    check(after.coins === expected, (after.correct ? 'right' : 'wrong') + ' answer scored correctly (' + coinsBefore + ' -> ' + after.coins + ')');
-    await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === false, null, { timeout: 6000 });
+    const expected = Math.max(0, coinsBefore + (after.correct ? COINS[7].right : COINS[7].wrong));
+    check(after.coins === expected, (after.correct ? 'right' : 'wrong') + ' answer scored once (' + coinsBefore + ' -> ' + after.coins + ')');
+    await keepRacing(page, tapGame);
+    const resumed = await race(page, () => window.mathKart.game.scene.getScene('RaceScene').isPaused === false);
+    check(resumed, '"Keep Racing" closes the math stop and racing resumes');
+
+    // Typed Grade 7 answer + whiteboard + hint.
+    await race(page, () => { window.mathKart.game.scene.getScene('RaceScene').coins = 100; });
+    const typedStop = await nextTypedStop(page, tapGame);
+    check(typedStop.grade === 7, 'typed Grade 7 question: "' + typedStop.question.slice(0, 60) + '" (answer ' + typedStop.answer + ')');
+    await typeOnKeypad(page, '12', tapGame);
+    check((await mathState(page)).typed === '12', 'keypad digits show up in the answer box');
+    await shot(page, 'ipad-05b-typed');
+
+    await tapGame(page, MATH.whiteboard[0], MATH.whiteboard[1]);
+    await page.waitForFunction(() => {
+        const wb = document.getElementById('mk-whiteboard');
+        return wb && getComputedStyle(wb).display !== 'none';
+    }, null, { timeout: 3000 });
+    check(true, 'Whiteboard button opens the full-screen scratch pad');
+    const wbBox = await page.locator('#mk-wb-canvas').boundingBox();
+    check(wbBox && wbBox.width >= 1000 && wbBox.height >= 600, 'scratch pad is nearly full screen (' + Math.round(wbBox.width) + 'x' + Math.round(wbBox.height) + ')');
+    const drawTouches = (type, pts) => page.evaluate(([type, pts]) => {
+        const c = document.getElementById('mk-wb-canvas');
+        const list = pts.map((p) => new Touch({ identifier: p.id, target: c, clientX: p.x, clientY: p.y, pageX: p.x, pageY: p.y }));
+        c.dispatchEvent(new TouchEvent(type, {
+            changedTouches: list, touches: type === 'touchend' ? [] : list, targetTouches: type === 'touchend' ? [] : list,
+            bubbles: true, cancelable: true
+        }));
+    }, [type, pts]);
+    const x0 = wbBox.x + 200;
+    const y0 = wbBox.y + 200;
+    await drawTouches('touchstart', [{ id: 21, x: x0, y: y0 }, { id: 22, x: x0, y: y0 + 200 }]);
+    for (let i = 1; i <= 12; i++) {
+        await drawTouches('touchmove', [{ id: 21, x: x0 + i * 25, y: y0 + (i % 2) * 20 }, { id: 22, x: x0 + i * 25, y: y0 + 200 }]);
+    }
+    const midDraw = await race(page, () => {
+        const hud = window.mathKart.game.scene.getScene('RaceHudScene');
+        const c = hud.controls;
+        return { pedals: c.forward || c.backward || c.left || c.right, pointerDown: window.mathKart.game.input.pointers.some((p) => p.isDown), paused: hud.race.isPaused };
+    });
+    await drawTouches('touchend', [{ id: 21, x: x0 + 300, y: y0 }, { id: 22, x: x0 + 300, y: y0 + 200 }]);
+    check(!midDraw.pedals && !midDraw.pointerDown && midDraw.paused, 'two-finger drawing never reaches the game (no pedals, no Phaser pointer, race paused)');
+    const ink = await inkPixels(page);
+    const wbInfo = await page.evaluate(() => window.mathKart.whiteboard());
+    check(ink > 500 && wbInfo.strokes === 2, 'two finger strokes are drawn on the pad (' + wbInfo.strokes + ' strokes, ' + ink + ' ink pixels)');
+    await shot(page, 'ipad-05c-whiteboard');
+    const done = await page.locator('#mk-wb-done').boundingBox();
+    await page.touchscreen.tap(done.x + done.width / 2, done.y + done.height / 2);
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('mk-whiteboard')).display === 'none', null, { timeout: 3000 });
+    const back = await mathState(page);
+    check(back.question === typedStop.question && back.typed === '12' && !back.answered && !back.closed && back.whiteboardOpens === 1,
+        'Done returns to the same question with the typed digits kept ("' + back.typed + '")');
+    const statsMid = await raceStats(page);
+    check(statsMid.coins === 100, 'drawing and closing the whiteboard does not score anything');
+
+    await tapGame(page, MATH.hint[0], MATH.hint[1]);
+    await page.waitForTimeout(200);
+    const hinted = await mathState(page);
+    check(hinted.hintUsed, 'Show hint reveals the hint');
+    check(!!(await findHudText(page, 'Hint used: half coins')), 'stakes now say "Hint used: half coins"');
+    await shot(page, 'ipad-05d-hint');
+    await typeOnKeypad(page, ['del', 'del'], tapGame);
+    await typeOnKeypad(page, typedStop.answer, tapGame);
+    const beforeRight = await raceStats(page);
+    await tapGame(page, MATH.keys.check[0], MATH.keys.check[1]);
+    await tapGame(page, MATH.keys.check[0], MATH.keys.check[1]);
+    await page.waitForTimeout(300);
+    const rightState = await mathState(page);
+    const afterRight = await raceStats(page);
+    check(rightState.correct === true && rightState.typed === typedStop.answer, 'typed answer ' + typedStop.answer + ' is marked right');
+    check(afterRight.coins - beforeRight.coins === COINS[7].hintRight && rightState.delta === COINS[7].hintRight && afterRight.asked === beforeRight.asked + 1,
+        'right after a hint pays only +' + COINS[7].hintRight + ' (' + beforeRight.coins + ' -> ' + afterRight.coins + '), once');
+    await shot(page, 'ipad-05e-right-with-hint');
+    await keepRacing(page, tapGame);
+
+    const wrongStop = await nextTypedStop(page, tapGame);
+    const beforeWrong = await raceStats(page);
+    await typeOnKeypad(page, '999', tapGame);
+    await tapGame(page, MATH.keys.check[0], MATH.keys.check[1]);
+    await page.waitForTimeout(400);
+    const wrongState = await mathState(page);
+    const afterWrong = await raceStats(page);
+    check(wrongState.correct === false && afterWrong.coins - beforeWrong.coins === COINS[7].wrong,
+        'wrong with no hint costs ' + COINS[7].wrong + ' (' + beforeWrong.coins + ' -> ' + afterWrong.coins + ')');
+    const shown = await findHudText(page, 'The answer is ');
+    check(!!shown && shown.indexOf(wrongStop.answer) !== -1, 'after a miss the correct answer is shown ("' + shown + '")');
+    await shot(page, 'ipad-05f-wrong');
+    await keepRacing(page, tapGame);
     check(true, 'math stop closed and racing resumed');
 
     // Fast-forward to the finish: mark every star done and cross the line.
@@ -264,8 +454,9 @@ async function ipadIos12(browser, baseUrl) {
     await shot(page, 'ipad-06b-menu-after-race');
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')));
     check(saved && saved.coins > 0, 'coins saved to localStorage (' + (saved && saved.coins) + ')');
+    check(saved && saved.grade === 7, 'Grade 7 is still selected after racing');
 
-    await tapGame(page, 512, 690);
+    await tapGame(page, MENU.shop[0], MENU.shop[1]);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('ShopScene').sys.isActive(), null, { timeout: 5000 });
     await page.waitForTimeout(300);
     await tapGame(page, 524 + 90 + 140, 130 + 140);
@@ -291,7 +482,7 @@ async function phoneLandscape(browser, baseUrl) {
         'entire game canvas is on screen (' + [box.x, box.y, box.width, box.height].map(Math.round).join(',') + ')');
     await page.waitForTimeout(300);
     await shot(page, 'phone-01-menu');
-    await tapGame(page, 512, 568);
+    await tapGame(page, MENU.start[0], MENU.start[1]);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceScene').sys.isActive(), null, { timeout: 5000 });
     check(true, 'START RACE is reachable and works');
     await context.close();
@@ -302,8 +493,64 @@ async function desktop(browser, baseUrl) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: 'load' });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
     const boot = await waitForBoot(page);
     check(boot.booted && !boot.error, 'game booted with ' + boot.renderer + ' (' + boot.reason + ')');
+
+    const click = async (pg, gx, gy) => {
+        const p = await toClient(pg, gx, gy);
+        await pg.mouse.click(p.x, p.y);
+    };
+    const savedGrade = () => page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')).grade);
+    await page.waitForTimeout(300);
+    check(await savedGrade() === 3, 'Grade 3 is the default');
+    await click(page, MENU.grade7[0], MENU.grade7[1]);
+    await click(page, MENU.grade3[0], MENU.grade3[1]);
+    await page.waitForTimeout(150);
+    await page.reload({ waitUntil: 'load' });
+    await waitForBoot(page);
+    check(await savedGrade() === 3 && await race(page, () => window.mathKart.game.scene.getScene('MenuScene').grade === 3),
+        'switching Grade 7 -> Grade 3 with the mouse persists across a reload');
+
+    await click(page, MENU.start[0], MENU.start[1]);
+    await page.waitForFunction(() => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return r && r.sys.isActive() && r.raceStarted;
+    }, null, { timeout: 10000 });
+
+    // Grade 3, answered right without a hint (keyboard for typed answers).
+    const g3 = await openMathStop(page);
+    check(g3.grade === 3 && ['add-subtract-units', 'multiplication', 'division'].indexOf(g3.kind) !== -1, 'Grade 3 problem: ' + g3.question + ' (' + g3.mode + ')');
+    const before = await raceStats(page);
+    if (g3.mode === 'typed') {
+        await page.keyboard.type(g3.answer);
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Enter');
+    } else {
+        const p = choicePos(g3, g3.answer);
+        await click(page, p[0], p[1]);
+    }
+    await page.waitForTimeout(300);
+    const after = await raceStats(page);
+    check(after.coins - before.coins === COINS[3].right && after.correct === before.correct + 1,
+        'right answer, no hint: +' + COINS[3].right + ' (' + before.coins + ' -> ' + after.coins + ')');
+    await keepRacing(page, click);
+
+    // Whiteboard with a mouse.
+    await openMathStop(page);
+    await click(page, MATH.whiteboard[0], MATH.whiteboard[1]);
+    await page.waitForFunction(() => window.mathKart.whiteboard().open, null, { timeout: 3000 });
+    await page.mouse.move(300, 300);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(300 + i * 30, 300 + i * 10);
+    await page.mouse.up();
+    const wb = await page.evaluate(() => window.mathKart.whiteboard());
+    check(wb.strokes === 1 && await inkPixels(page) > 300, 'mouse drawing works on the scratch pad');
+    await page.click('#mk-wb-done');
+    const st = await mathState(page);
+    check(!(await page.evaluate(() => window.mathKart.whiteboard().open)) && !st.answered && !st.closed, 'Done returns to the unanswered question');
+    check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
 }
 
