@@ -1,5 +1,70 @@
 # Technical Notes - Math Kart
 
+## Grades, hints and coins (for parents)
+
+**Picking a grade.** The menu has two big buttons under the title:
+**Grade 3** (+ − × ÷ and units) and **Grade 7** (similar shapes). The picked
+one is orange. It is saved with the rest of the progress (`grade` in
+`mathKartSave`), so each child just checks the orange button before tapping
+START RACE. Coins, upgrades and paint are shared between grades. In Private
+Browsing the choice lasts until Safari is closed, like coins do.
+
+**Answering.** Some Math Stops have big answer buttons; others show a number
+keypad (0-9, `.`, `/` for fractions, ← backspace, CLEAR) and a **CHECK**
+button. Roughly half of Grade 3 problems are typed. In Grade 7 the YES/NO
+"are these similar?" questions use buttons and every find-x, word and scale
+problem is typed (about 70% of Grade 7 overall). Each Math Stop scores once:
+extra taps on CHECK or answer buttons are ignored.
+
+**Hints.** The **SHOW HINT** button reveals one useful step, e.g.
+"Scale factor = 20 ÷ 8 = 2.5. Multiply the other small side by it." or
+"Compare long ÷ long and short ÷ short: 15 ÷ 9, 9 ÷ 6. Same number?". It never
+states x. The line above the button shows what a hint costs; once used, the
+button reads HINT USED and the line says "Hint used: half coins if right".
+
+**Coins per Math Stop** (defined in `src/math/scoring.js`, same for both grades):
+
+| Result | Coins | Before |
+| --- | --- | --- |
+| Right, no hint | +6 | +5 |
+| Right, after a hint | +3 (half, rounded up) | – |
+| Wrong, after a hint | −4 (half the guess penalty) | – |
+| Wrong, no hint | −8 | −2 |
+
+Coins never drop below 0. Why these numbers:
+- The worst outcome is a blind wrong guess (−8), four times the old penalty.
+- Right with a hint (+3) always beats any wrong answer.
+- Guessing loses coins on average: a coin-flip on YES/NO averages −1 per
+  question without a hint and −0.5 with one; 3-button Grade 3 questions
+  average −3.3. Typed answers can't really be guessed.
+- A careful kid still earns plenty: 6 right out of 6 is +36 per race on top of
+  the 50/30/15 place prize.
+
+After every answer a green or red banner shows the change ("+3 coins",
+"−8 coins"). A miss also shows the right answer and the working, e.g.
+"Not quite. The answer is x = 6.67 (= 20/3). x = 15 × 4 ÷ 9 = 6.67 (= 20/3)".
+Racing resumes after a few seconds (longer after a miss) or on **KEEP RACING**.
+The results card shows "Math: 4 of 6 right • 2 hints".
+
+**Typed answers that count as right.** Whole numbers and short decimals must be
+exact (`15`, `15.0`, `14.4`, `2.5`, `5/2`). Repeating answers like 20/3 accept
+the fraction or a decimal with at least one place that is rounded or cut off:
+`6.7`, `6.6`, `6.67`, `6.66`, `6.667`. `6.5` and `7` are wrong.
+
+**Grade 7 content** (`src/math/similarFigures.js`) follows Ellie's 7.2.8.B
+"Similar Figures" worksheet, but every problem is generated with fresh numbers;
+none of the worksheet's answers are stored:
+- similar-yesno (25%): triangles (3 sides each) or rectangles, sometimes turned
+- find-x (45%): rectangles, right triangles, parallelograms, L-shapes
+- word-find (15%): desk / photo / pool / kite / garden / screen, realistic sizes
+- word-yesno (5%): is a drawing / sticker / postcard similar to the real thing
+- scale (10%): map distances, floor plans, 1-to-N toy cars
+
+**Getting the new version on the iPad after this ships:** open
+`https://baileybusch.github.io/math-kart/?v=4` in Safari (use `?v=5` for the
+following update). If it still shows the old menu without grade buttons,
+clear Website Data for github.io (see step 3 of the checklist below).
+
 ## Old iPad mini / iOS 12 support
 
 **Primary device:** iPad mini 2 (A1489), stuck on iOS 12 Safari.
@@ -52,32 +117,49 @@
 - `npm run test:smoke`: serves `dist/` and drives headless Chrome with an
   "iPad iOS 12" profile (iPad iOS 12 UA, 1024x768 touch, WebGL disabled,
   `ResizeObserver`/`PointerEvent`/`structuredClone`/etc. deleted). It checks
-  boot on Canvas, START RACE, two-finger driving, pause, a Math Stop
-  (one answer only), finishing, Race Again, Quit, and a shop purchase. It also
-  checks that the phone layout fits on screen and that a broken or missing
-  bundle shows the error card.
+  boot on Canvas, START RACE, two-finger driving, pause, a Grade 3 multiple-
+  choice Math Stop (two taps, one payout), finishing, Race Again, Quit, and a
+  shop purchase. Then Grade 7: the pick is saved and survives a reload; a
+  find-x stop is typed on the keypad after SHOW HINT (+3); a wrong typed answer
+  with no hint costs 8 and shows the right answer; a YES/NO stop tapped twice
+  pays +6 once. A private-browsing context (setItem throws) can still pick
+  Grade 7. It also checks that the phone layout fits on screen and that a
+  broken or missing bundle shows the error card.
+- `npm run test:unit`: plain Node, no browser. Typed-answer tolerance
+  (6.67 / 6.6 / 20/3 accepted for 20/3; exact for 2.5 and 14.4), keypad
+  editing, coin rule ordering (guessing never pays), and thousands of
+  generated Grade 3 / Grade 7 problems: answers match the drawn figures, the
+  shown answer is accepted, hints never contain "x =", labels use whole
+  numbers or one decimal, word problems use believable sizes, and the typed /
+  multiple-choice mix is as described above.
 - Headless Chrome is not Safari 12. The syntax check covers the parse error;
   the checklist below covers real-device behaviour.
 
 ### Manual checklist: iPad mini (iOS 12)
 Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 
-1. [ ] Open `https://baileybusch.github.io/math-kart/?v=<new number>` in Safari.
+1. [ ] Open `https://baileybusch.github.io/math-kart/?v=<new number>` in Safari
+       (`?v=4` for the grades + hints release, then 5, 6, ...).
 2. [ ] Within a few seconds you see the blue "MATH KART / Starting engines…"
        screen, then the menu. Never a dark blank page.
 3. [ ] If instead you see "Math Kart couldn't start", note the grey details
        line, tap Try Again, and if needed clear Website Data (Settings → Safari
        → Advanced → Website Data → github.io → Delete).
-4. [ ] Landscape: the menu fills the screen; title, both track cards,
-       START RACE and SHOP are visible without scrolling or zooming.
-5. [ ] Tap the Forest card, then START RACE. The 3-2-1-GO countdown plays.
+4. [ ] Landscape: the menu fills the screen; title, Grade 3 / Grade 7
+       buttons, both track cards, START RACE and SHOP are visible without
+       scrolling or zooming.
+5. [ ] Tap Grade 3 (turns orange), the Forest card, then START RACE. The
+       3-2-1-GO countdown plays.
 6. [ ] Hold GO with the right thumb and steer with the left thumb at the
        same time. The kart moves and turns smoothly (no big stutter).
 7. [ ] Drive off the road: the kart slows down on the grass.
 8. [ ] Follow the yellow arrow to star 1. The Math Stop appears, the question
-       fits on one line, and the answer buttons are easy to tap.
-9. [ ] Tap an answer twice quickly. Only one result shows; coins change once.
-       On a wrong answer, the right answer turns green.
+       fits, and the answer buttons or keypad keys are easy to tap. The top
+       line says "Grade 3 • Lap 1 • Star 1" and "Right +6  Wrong −8".
+9. [ ] Tap an answer twice quickly (or CHECK twice). Only one result shows;
+       coins change once. A green/red "+6 coins" / "−8 coins" banner appears.
+       On a wrong answer, the right answer turns green (buttons) or is written
+       in the pink box (keypad).
 10. [ ] Tap II (pause) → Keep Racing resumes; II → Quit to Menu returns to
         the menu.
 11. [ ] Finish a 2-lap race. The results card shows place, prize and
@@ -89,6 +171,16 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 14. [ ] Rotate to portrait: the game shrinks to fit and still works.
 15. [ ] Optional: open `?renderer=webgl` to compare. If it's blank or glitchy,
         stay on the default (Canvas).
+16. [ ] Menu → tap **Grade 7**, START RACE. At a find-x star: the two shapes
+        are drawn with side numbers and an orange x.
+17. [ ] Tap SHOW HINT: a yellow box shows the scale factor, the button turns
+        grey ("HINT USED"). Type the answer (try a repeating one as `6.67`),
+        tap CHECK: "+3 coins".
+18. [ ] Next star: type a wrong number without a hint → "−8 coins" and the
+        pink box shows the right answer and working.
+19. [ ] Keypad: ← deletes one digit, CLEAR empties, only one `.` allowed,
+        CHECK stays grey until something is typed.
+20. [ ] Close Safari fully and reopen the link: Grade 7 is still orange.
 
 ## What Was Built
 
@@ -231,8 +323,12 @@ const PACKS = {
 };
 ```
 
-Registered packs are picked automatically by `getMixedProblem()`, which
-`RaceScene.showMathStop()` calls at every star.
+Registered packs are picked automatically by `getMixedProblem()`. At every
+star `RaceScene.showMathStop()` calls `getProblemForGrade(grade)` from
+`src/math/grades.js`, which uses the Grade 3 packs or the Grade 7 Similar
+Figures generator. Math code no longer imports Phaser: use `randInt`, `pick`
+and `shuffle` from `src/math/random.js` instead of `Phaser.Math` in new packs,
+and add `hint` and `explain` strings.
 
 ### Example: Adding Fractions Pack
 
@@ -265,7 +361,7 @@ const fractionsPack = {
 
 1. **No difficulty scaling**: Currently uses hardcoded difficulty. Could add dynamic difficulty based on performance.
 
-2. **No pack selection**: Packs are mixed randomly at every star. Could allow pack selection in the menu.
+2. **Grade, not pack, selection**: The menu picks a grade; Grade 3 packs are still mixed randomly at every star. Coins are shared between grades (one save per device).
 
 3. **Fixed checkpoint count**: Always 3 stars per lap, 2 laps. Could vary by track.
 
@@ -343,9 +439,14 @@ Stored in `localStorage` under key `mathKartSave`:
   "currentColor": "blue",
   "speedUpgrades": 2,
   "handlingUpgrades": 1,
-  "difficulty": 1
+  "difficulty": 1,
+  "lastCourse": "forest",
+  "grade": 7
 }
 ```
+
+`grade` is 3 or 7 (anything else loads as 3). Older saves without it start on
+Grade 3.
 
 ## Credits
 

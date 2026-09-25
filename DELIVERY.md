@@ -7,6 +7,12 @@
 > checklist, and [QUICKSTART.md](QUICKSTART.md) for how to load the new
 > version on the iPad. Some details below (controls, screens) predate the
 > redesign.
+>
+> **Update 2:** the menu now has a Grade 3 / Grade 7 picker, Grade 7 has a
+> Similar Figures pack, many answers are typed on a keypad, and Math Stops
+> have a hint button with new coin rules (+6 / +3 with hint / −4 / −8). See
+> "Grades, hints and coins" in [NOTES.md](NOTES.md). Load it on the iPad with
+> `?v=4`.
 
 ## ✅ ALL COMPLETE - Ready to Play!
 

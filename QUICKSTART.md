@@ -32,12 +32,31 @@ If you want to run it on your computer instead:
 
 ## What Your Child Will Do
 
-1. **Pick a track** on the menu (Forest to start, Desert unlocks in the Shop)
-2. **Tap START RACE**, wait for 3-2-1-GO!
-3. **Drive to the yellow stars.** The yellow arrow next to your kart points to the next one
-4. **Solve the Math Stop** at each star - a right answer gives 5 coins! 💰
-5. **Race 2 laps** (3 stars per lap) and cross the checkered line
-6. **Win prize coins** (1st place = 50!) and visit the **Shop**
+1. **Pick a grade** on the menu: **Grade 3** or **Grade 7**. The orange one is
+   picked, and the game remembers it next time (so check it when siblings swap)
+2. **Pick a track** (Forest to start, Desert unlocks in the Shop)
+3. **Tap START RACE**, wait for 3-2-1-GO!
+4. **Drive to the yellow stars.** The yellow arrow next to your kart points to the next one
+5. **Solve the Math Stop** at each star. Tap an answer button, or type the
+   number on the keypad and tap **CHECK** 💰
+6. **Race 2 laps** (3 stars per lap) and cross the checkered line
+7. **Win prize coins** (1st place = 50!) and visit the **Shop**
+
+### Hints and coins
+
+Stuck? Tap the big yellow **SHOW HINT** button. It shows one step (like
+"Scale factor = 20 ÷ 8 = 2.5") but the reward is cut in half.
+
+| At a Math Stop | Coins |
+| --- | --- |
+| Right, no hint | +6 |
+| Right, after a hint | +3 |
+| Wrong, after a hint | −4 |
+| Wrong, no hint (guessing) | −8 |
+
+Guessing costs the most, so a hint is always better than a wild guess. A
+green or red banner shows the coins after each answer, and a miss shows the
+right answer and how to get it.
 
 ---
 
@@ -63,13 +82,21 @@ If you want to run it on your computer instead:
 - Unlock the Desert track (costs 100 coins)
 - Buy Speed and Steering upgrades
 - Change your kart paint in the shop
-- Wrong answers are OK - the game shows the right answer, and coins never go below 0!
+- Wrong answers are OK - the game shows the right answer and working, and coins never go below 0!
+- Not sure? Use a hint instead of guessing - guessing costs 8 coins, a hint only halves the reward
 
 ---
 
-## Math Topics (3 Packs Included!)
+## Math Topics
 
-The game teaches:
+### Grade 7: Similar Figures (like the 7.2.8.B homework)
+- Are two triangles or rectangles similar? (YES / NO)
+- The shapes are similar: find x (rectangles, right triangles, parallelograms, L-shapes)
+- Word problems: desks, photos, pools, kites, flags and posters
+- Scale: maps, floor plans, toy cars
+- Decimal answers: type `6.67`, `6.7` or `20/3` for 20/3; clean ones like `14.4` must be exact
+
+### Grade 3
 
 **Addition & Subtraction:**
 - 2-digit addition & subtraction
@@ -83,7 +110,7 @@ The game teaches:
 - Division with 2, 5, 10
 - Basic division (no remainders)
 
-All problems are early 3rd grade level!
+About half of Grade 3 problems are typed on the keypad instead of tapped.
 
 ---
 
@@ -91,8 +118,10 @@ All problems are early 3rd grade level!
 
 **Getting the newest version on the iPad (Safari has no "hard refresh")**
 1. Open the link with a new number on the end, e.g.
-   `https://baileybusch.github.io/math-kart/?v=3`
-   (any number you haven't used before forces a fresh download).
+   `https://baileybusch.github.io/math-kart/?v=4`
+   (any number you haven't used before forces a fresh download; use `?v=5`
+   for the next update). The new version has **Grade 3 / Grade 7** buttons
+   on the menu.
 2. Still old or blank? **Settings → Safari → Advanced → Website Data →**
    search "github" → swipe left → **Delete**, then reopen the link.
    (This also resets coins.)
