@@ -9,6 +9,9 @@ import { GRADES, getProblemForGrade } from '../src/math/grades.js';
 import { checkAnswer, parseTypedNumber, formatNumber, toleranceFor } from '../src/math/answers.js';
 import { coinDelta, coinRules } from '../src/math/economy.js';
 import similarFigures, { YES, NO } from '../src/math/similarFigures.js';
+import { COURSE_ORDER, STARTER_COURSE, ROAD_WIDTH, allCourses, courseGeometry, courseStatus } from '../src/game/courses.js';
+import { stepKart, updateProgress, reachedCheckpoint, kartStats, BOUNDS_MARGIN } from '../src/game/raceLogic.js';
+import { pointAt } from '../src/game/trackMath.js';
 
 let failures = 0;
 function check(cond, msg) {
@@ -143,6 +146,99 @@ console.log('\n[grade 7 problem types exist]');
 Object.keys(similarFigures.generators).forEach((name) => {
     const p = similarFigures.generators[name]();
     ok(!!p && typeof p.question === 'string', name + ': "' + p.question.slice(0, 70) + (p.question.length > 70 ? '\u2026' : '') + '" -> ' + p.answer);
+});
+
+// ------------------------------------------------------------ courses
+
+function segDist(a, b, c, d) {
+    const pointSeg = (p, s, e) => {
+        const dx = e.x - s.x; const dy = e.y - s.y;
+        let t = ((p.x - s.x) * dx + (p.y - s.y) * dy) / (dx * dx + dy * dy);
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(p.x - (s.x + dx * t), p.y - (s.y + dy * t));
+    };
+    const cross = (o, p, q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
+    const intersects = cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0;
+    if (intersects) return 0;
+    return Math.min(pointSeg(a, c, d), pointSeg(b, c, d), pointSeg(c, a, b), pointSeg(d, a, b));
+}
+
+/** Drives two laps with a look-ahead autopilot using the game's own rules. */
+function simulateRace(geo, stats) {
+    const loop = geo.loop;
+    const start = pointAt(loop, -70);
+    const kart = Object.assign({
+        x: start.x + start.normX * 48, y: start.y + start.normY * 48,
+        rotation: Math.atan2(start.dirX, -start.dirY), speed: 0,
+        segHint: loop.segs.length - 1, along: -70, offRoad: false
+    }, stats);
+    const race = { lap: 0, cpInLap: 0 };
+    const dt = 1 / 60;
+    const out = { checkpoints: 0, finished: false, time: 0, offRoadFrames: 0, clampedFrames: 0, frames: 0 };
+    for (let f = 0; f < 60 * 240 && !out.finished; f++) {
+        const target = pointAt(loop, kart.along + 240);
+        const want = Math.atan2(target.x - kart.x, -(target.y - kart.y));
+        let diff = want - kart.rotation;
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        const input = { forward: Math.abs(diff) < 1.1, backward: false, left: diff < -0.06, right: diff > 0.06 };
+        stepKart(kart, input, dt, geo.width, geo.height);
+        if (kart.x <= BOUNDS_MARGIN || kart.y <= BOUNDS_MARGIN || kart.x >= geo.width - BOUNDS_MARGIN || kart.y >= geo.height - BOUNDS_MARGIN) out.clampedFrames++;
+        if (updateProgress(race, kart, geo) && race.lap >= 2) out.finished = true;
+        if (reachedCheckpoint(race, kart, geo)) { race.cpInLap++; out.checkpoints++; }
+        if (kart.offRoad) out.offRoadFrames++;
+        out.frames++;
+    }
+    out.time = out.frames * dt;
+    return out;
+}
+
+console.log('\n[courses and unlock ladder]');
+ok(COURSE_ORDER.length >= 4 && COURSE_ORDER[0] === STARTER_COURSE && COURSE_ORDER.indexOf('desert') === 1, 'at least 4 courses, starter first, Desert second: ' + COURSE_ORDER.join(' > '));
+const costs = allCourses().map((c) => c.cost);
+ok(costs[0] === 0 && costs.every((c, i) => i === 0 || c > costs[i - 1]), 'unlock costs escalate: ' + costs.join(', '));
+ok(allCourses().every((c, i, all) => i === 0 || c.prizes[0] >= all[i - 1].prizes[0]), 'later courses pay at least as much for 1st place');
+ok(courseStatus('desert', ['forest']) === 'next' && courseStatus('pine', ['forest']) === 'later' &&
+    courseStatus('pine', ['forest', 'desert']) === 'next' && courseStatus('forest', []) === 'unlocked', 'ladder: each course needs the one before it');
+const palettes = allCourses().map((c) => c.palette.ground);
+ok(new Set(palettes).size === palettes.length, 'every course has its own ground colour');
+
+allCourses().forEach((c) => {
+    const before = failures;
+    const geo = courseGeometry(c.id);
+    const pts = geo.points;
+    const n = pts.length;
+    const edge = ROAD_WIDTH / 2 + 60;
+    pts.forEach((p, i) => check(p.x >= edge && p.y >= edge && p.x <= c.width - edge && p.y <= c.height - edge,
+        c.id + ': waypoint ' + i + ' (' + p.x + ',' + p.y + ') keeps the road inside the course'));
+    let minGap = Infinity;
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 3; j < n; j++) {
+            if ((i + n - j) % n < 3) continue;
+            const d = segDist(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]);
+            minGap = Math.min(minGap, d);
+            check(d >= ROAD_WIDTH + 60, c.id + ': roads ' + i + ' and ' + j + ' stay apart (' + Math.round(d) + ')');
+        }
+    }
+    let maxTurn = 0;
+    for (let i = 0; i < n; i++) {
+        const a = pts[(i + n - 1) % n]; const b = pts[i]; const d = pts[(i + 1) % n];
+        const t = Math.abs(Math.atan2((b.x - a.x) * (d.y - b.y) - (b.y - a.y) * (d.x - b.x), (b.x - a.x) * (d.x - b.x) + (b.y - a.y) * (d.y - b.y))) * 180 / Math.PI;
+        maxTurn = Math.max(maxTurn, t);
+        check(t <= 100, c.id + ': turn at waypoint ' + i + ' is gentle enough (' + Math.round(t) + ' deg)');
+    }
+    const fr = geo.checkpoints.map((cp) => cp.along / geo.loop.total);
+    check(fr.every((f, i) => f > 0.12 && f < 0.92 && (i === 0 || f - fr[i - 1] >= 0.15)), c.id + ': checkpoints spread around the lap (' + fr.map((f) => f.toFixed(2)).join(', ') + ')');
+
+    const base = simulateRace(geo, kartStats({ speedUpgrades: 0, handlingUpgrades: 0 }));
+    const fast = simulateRace(geo, kartStats({ speedUpgrades: 5, handlingUpgrades: 0 }));
+    [['base kart', base], ['max speed, no steering', fast]].forEach(([label, r]) => {
+        check(r.finished && r.checkpoints === 2 * geo.checkpoints.length, c.id + ' (' + label + '): autopilot reaches all ' + 2 * geo.checkpoints.length + ' checkpoints and finishes (' + r.checkpoints + ')');
+        check(r.clampedFrames === 0, c.id + ' (' + label + '): never pushed against the course edge');
+        check(r.offRoadFrames / r.frames < 0.12, c.id + ' (' + label + '): stays on the road (' + Math.round(100 * r.offRoadFrames / r.frames) + '% off-road)');
+    });
+    ok(failures === before, c.name + ' (' + c.cost + ' coins): ' + n + ' waypoints, road gap ' + Math.round(minGap) + ', sharpest turn ' + Math.round(maxTurn) +
+        ' deg, 2 laps in ' + Math.round(base.time) + ' s (' + Math.round(100 * base.offRoadFrames / base.frames) + '% off-road)');
 });
 
 if (failures) {

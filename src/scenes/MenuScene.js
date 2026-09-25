@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getSaveData, updateSaveData } from '../utils/saveManager.js';
-import { getCourseInfo } from '../game/trackBuilder.js';
+import { allCourses, courseStatus, getCourse, requiredCourse } from '../game/courses.js';
+import { drawCoursePreview } from '../ui/coursePreview.js';
 import {
     GAME_WIDTH, COLORS, INK, textStyle, addTitle, drawPanel, drawKart,
     createButton, createCoinPill, fadeToScene, kartColor
@@ -9,22 +10,21 @@ import { markBooted } from '../boot.js';
 import { GRADES, getGrade } from '../math/grades.js';
 
 const W = GAME_WIDTH;
-const DESERT_PRICE = 100;
 
 // Vertical layout (the smoke test taps these).
 export const MENU_LAYOUT = {
     gradeY: 214,
     gradeXs: [W / 2 - 170, W / 2 + 170],
     cardsY: 404,
+    cardXs: [128, 320, 512, 704, 896],
+    messageY: 537,
     startY: 612,
     shopY: 714
 };
 const LAYOUT = MENU_LAYOUT;
 
-const COURSE_CARDS = [
-    { id: 'forest', x: W / 2 - 200, ground: 0x5cc85c, road: 0x8d7b68, deco: 0x2b8a3e },
-    { id: 'desert', x: W / 2 + 200, ground: 0xf2d49b, road: 0xb08968, deco: 0x2f9e44 }
-];
+const CARD_W = 180;
+const CARD_H = 220;
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -51,8 +51,11 @@ export default class MenuScene extends Phaser.Scene {
         this.gradeCards = GRADES.map((grade, i) => this.createGradeCard(grade, LAYOUT.gradeXs[i]));
         this.refreshGrades();
 
-        this.cards = COURSE_CARDS.map((card) => this.createCourseCard(card));
+        this.cards = allCourses().map((course, i) => this.createCourseCard(course, LAYOUT.cardXs[i]));
         this.refreshCards();
+        this.message = this.add.text(W / 2, LAYOUT.messageY, '', textStyle(22, '#ffffff', {
+            stroke: INK, strokeThickness: 6
+        })).setOrigin(0.5);
 
         createButton(this, W / 2, LAYOUT.startY, {
             width: 460, height: 108, radius: 36,
@@ -95,55 +98,44 @@ export default class MenuScene extends Phaser.Scene {
         this.tweens.add({ targets: kart, x: W + 60, duration: 6000, repeat: -1, delay: 400 });
     }
 
-    createCourseCard(card) {
-        const info = getCourseInfo(card.id);
-        const unlocked = this.save.unlockedCourses.indexOf(card.id) !== -1;
-        const c = this.add.container(card.x, LAYOUT.cardsY);
-
+    createCourseCard(course, x) {
+        const status = courseStatus(course.id, this.save.unlockedCourses);
+        const unlocked = status === 'unlocked';
+        const c = this.add.container(x, LAYOUT.cardsY);
         const glow = this.add.graphics();
         const g = this.add.graphics();
-        drawPanel(g, -170, -115, 340, 230, COLORS.white, 28);
-        g.fillStyle(card.ground, 1);
-        g.fillRoundedRect(-150, -98, 300, 140, 18);
-        g.lineStyle(26, card.road, 1);
-        g.strokeRoundedRect(-112, -72, 224, 88, 40);
-        g.fillStyle(card.deco, 1);
-        g.fillCircle(0, -28, 16);
-        g.fillCircle(-128, 22, 12);
-        g.fillCircle(128, -80, 12);
-
-        const name = this.add.text(0, 76, info.name, textStyle(32, INK)).setOrigin(0.5);
-        c.add([glow, g, name]);
-
-        if (!unlocked) {
-            const lock = this.add.graphics();
-            lock.fillStyle(0x000000, 0.45);
-            lock.fillRoundedRect(-150, -98, 300, 140, 18);
-            lock.fillStyle(COLORS.yellow, 1);
-            lock.fillRoundedRect(-22, -40, 44, 38, 8);
-            lock.lineStyle(8, COLORS.yellow, 1);
-            lock.strokeCircle(0, -44, 14);
-            c.add(lock);
-            c.add(this.add.text(0, 20, 'Unlock in Shop: ' + DESERT_PRICE + ' coins', textStyle(20, '#ffffff', {
-                stroke: INK, strokeThickness: 5
-            })).setOrigin(0.5));
+        drawPanel(g, -CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H, COLORS.white, 22);
+        drawCoursePreview(g, course, -CARD_W / 2 + 10, -CARD_H / 2 + 10, CARD_W - 20, 104, !unlocked);
+        const name = this.add.text(0, 24, course.name, textStyle(21, INK)).setOrigin(0.5);
+        let detail;
+        if (unlocked) {
+            detail = this.add.text(0, 60, '1st prize: ' + course.prizes[0], textStyle(17, '#2b8a3e')).setOrigin(0.5);
+        } else {
+            detail = this.add.text(0, 60, course.cost + ' coins', textStyle(20, status === 'next' ? '#e67700' : '#868e96')).setOrigin(0.5);
         }
+        const sub = this.add.text(0, 86, unlocked ? course.blurb : (status === 'next' ? 'Unlock in Shop' : 'After ' + getCourse(requiredCourse(course.id)).name),
+            textStyle(13, '#868e96', { wordWrap: { width: CARD_W - 16 } })).setOrigin(0.5);
+        c.add([glow, g, name, detail, sub]);
 
-        const hit = this.add.rectangle(0, 0, 340, 240).setInteractive({ useHandCursor: true });
+        const hit = this.add.rectangle(0, 0, CARD_W, CARD_H).setInteractive({ useHandCursor: true });
         hit.on('pointerup', () => {
             if (unlocked) {
-                this.selected = card.id;
+                this.selected = course.id;
                 const save = getSaveData();
-                save.lastCourse = card.id;
+                save.lastCourse = course.id;
                 updateSaveData(save);
+                this.message.setText('');
                 this.refreshCards();
             } else {
-                this.tweens.add({ targets: c, x: card.x + 10, duration: 60, yoyo: true, repeat: 2 });
+                this.message.setText(status === 'next'
+                    ? course.name + ': unlock it in the Shop for ' + course.cost + ' coins'
+                    : course.name + ': unlock ' + getCourse(requiredCourse(course.id)).name + ' first');
+                this.tweens.add({ targets: c, x: x + 8, duration: 60, yoyo: true, repeat: 2 });
             }
         });
         c.add(hit);
 
-        return { id: card.id, container: c, glow, unlocked };
+        return { id: course.id, container: c, glow, unlocked };
     }
 
     createGradeCard(grade, x) {
@@ -189,9 +181,9 @@ export default class MenuScene extends Phaser.Scene {
             card.glow.clear();
             if (on) {
                 card.glow.fillStyle(COLORS.yellow, 1);
-                card.glow.fillRoundedRect(-186, -131, 372, 270, 38);
+                card.glow.fillRoundedRect(-CARD_W / 2 - 8, -CARD_H / 2 - 8, CARD_W + 16, CARD_H + 24, 28);
             }
-            card.container.setScale(on ? 1.04 : 0.96);
+            card.container.setScale(on ? 1 : 0.95);
         });
     }
 }

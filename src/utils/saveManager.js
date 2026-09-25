@@ -1,4 +1,5 @@
 import { isGrade, DEFAULT_GRADE } from '../math/grades.js';
+import { isCourse } from '../game/courses.js';
 
 const SAVE_KEY = 'mathKartSave';
 
@@ -55,7 +56,7 @@ function sanitize(raw) {
     data.difficulty = toCount(raw.difficulty, 5) || 1;
 
     if (Array.isArray(raw.unlockedCourses)) {
-        data.unlockedCourses = raw.unlockedCourses.filter((c) => typeof c === 'string');
+        data.unlockedCourses = raw.unlockedCourses.filter((c, i, all) => isCourse(c) && all.indexOf(c) === i);
     }
     if (data.unlockedCourses.indexOf('forest') === -1) data.unlockedCourses.unshift('forest');
 

@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { getSaveData, updateSaveData } from '../utils/saveManager.js';
+import { allCourses, courseStatus, getCourse, requiredCourse, STARTER_COURSE } from '../game/courses.js';
+import { drawCoursePreview } from '../ui/coursePreview.js';
 import {
     GAME_WIDTH, GAME_HEIGHT, COLORS, INK, KART_COLORS, textStyle, addTitle, drawPanel,
     drawKart, drawMenuBackdrop, createButton, createCoinPill, fadeToScene
@@ -10,7 +12,6 @@ const H = GAME_HEIGHT;
 const UPGRADE_COST = 30;
 const MAX_LEVEL = 5;
 const COLOR_COST = 20;
-const DESERT_COST = 100;
 
 export default class ShopScene extends Phaser.Scene {
     constructor() {
@@ -34,9 +35,9 @@ export default class ShopScene extends Phaser.Scene {
             onTap: () => fadeToScene(this, 'MenuScene')
         });
 
-        this.createUpgrades(40, 130, 460, 360);
-        this.createPaint(524, 130, 460, 360);
-        this.createTrackUnlock(40, 520, 944, 200);
+        this.createUpgrades(40, 128, 460, 342);
+        this.createPaint(524, 128, 460, 342);
+        this.createTracks(40, 484, 944, 268);
 
         if (this.toastText) this.toast(this.toastText, COLORS.green);
     }
@@ -138,34 +139,47 @@ export default class ShopScene extends Phaser.Scene {
         });
     }
 
-    createTrackUnlock(x, y, width, height) {
+    createTracks(x, y, width, height) {
         const g = this.add.graphics();
         drawPanel(g, x, y, width, height, COLORS.white, 28);
+        this.add.text(x + 28, y + 30, 'Track Ladder', textStyle(30, INK, { align: 'left' })).setOrigin(0, 0.5);
+        this.add.text(x + width - 28, y + 30, 'Unlock them in order. Harder tracks pay bigger prizes!',
+            textStyle(18, '#868e96', { align: 'right' })).setOrigin(1, 0.5);
 
-        g.fillStyle(0xf2d49b, 1);
-        g.fillRoundedRect(x + 24, y + 24, 230, height - 48, 18);
-        g.lineStyle(22, 0xb08968, 1);
-        g.strokeRoundedRect(x + 56, y + 50, 166, height - 100, 34);
-        g.fillStyle(0x2f9e44, 1);
-        g.fillRoundedRect(x + 132, y + 76, 16, 48, 8);
-        g.fillRoundedRect(x + 116, y + 90, 12, 22, 6);
+        const courses = allCourses().filter((c) => c.id !== STARTER_COURSE);
+        const tileW = 218;
+        const gap = (width - courses.length * tileW) / (courses.length + 1);
+        courses.forEach((course, i) => {
+            const tx = x + gap + i * (tileW + gap);
+            const cx = tx + tileW / 2;
+            const status = courseStatus(course.id, this.save.unlockedCourses);
+            const tile = this.add.graphics();
+            tile.fillStyle(status === 'unlocked' ? 0xfff9db : 0xf1f3f5, 1);
+            tile.fillRoundedRect(tx, y + 56, tileW, height - 70, 20);
+            tile.lineStyle(3, COLORS.ink, 1);
+            tile.strokeRoundedRect(tx, y + 56, tileW, height - 70, 20);
+            drawCoursePreview(tile, course, tx + 10, y + 64, tileW - 20, 76, status !== 'unlocked');
+            this.add.text(cx, y + 160, course.name, textStyle(22, INK)).setOrigin(0.5);
+            this.add.text(cx, y + 184, '1st prize: ' + course.prizes[0] + ' coins', textStyle(15, '#868e96')).setOrigin(0.5);
 
-        this.add.text(x + 290, y + 58, 'NEW TRACK', textStyle(22, '#e67700', { align: 'left' })).setOrigin(0, 0.5);
-        this.add.text(x + 290, y + 98, 'Desert Canyon', textStyle(38, INK, { align: 'left' })).setOrigin(0, 0.5);
-        this.add.text(x + 290, y + 142, 'Twisty sand roads and cactus!', textStyle(22, '#868e96', { align: 'left' })).setOrigin(0, 0.5);
-
-        const unlocked = this.save.unlockedCourses.indexOf('desert') !== -1;
-        const affordable = this.save.coins >= DESERT_COST;
-        createButton(this, x + width - 140, y + height / 2 + 4, {
-            width: 230, height: 110, radius: 30,
-            label: unlocked ? 'Unlocked!' : 'Unlock\n' + DESERT_COST + ' coins',
-            fontSize: unlocked ? 34 : 30,
-            color: unlocked ? COLORS.gold : (affordable ? COLORS.green : COLORS.grayDark),
-            enabled: !unlocked,
-            onTap: () => this.buy(DESERT_COST, (s) => {
-                s.unlockedCourses.push('desert');
-                s.lastCourse = 'desert';
-            }, 'Desert Canyon unlocked!')
+            const affordable = this.save.coins >= course.cost;
+            const btn = createButton(this, cx, y + 226, {
+                width: tileW - 22, height: 56, radius: 20,
+                label: status === 'unlocked' ? 'Unlocked!'
+                    : status === 'next' ? 'Unlock ' + course.cost
+                        : 'After ' + getCourse(requiredCourse(course.id)).name,
+                fontSize: status === 'later' ? 19 : 26,
+                color: status === 'unlocked' ? COLORS.gold : (status === 'next' && affordable ? COLORS.green : COLORS.grayDark),
+                enabled: status !== 'later',
+                onTap: () => {
+                    if (courseStatus(course.id, getSaveData().unlockedCourses) !== 'next') return;
+                    this.buy(course.cost, (s) => {
+                        s.unlockedCourses.push(course.id);
+                        s.lastCourse = course.id;
+                    }, course.name + ' unlocked!');
+                }
+            });
+            btn.courseId = course.id;
         });
     }
 
