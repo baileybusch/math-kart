@@ -61,8 +61,10 @@
   whiteboard (two-finger drawing that never reaches the pedals, then Done back
   to the same question with the typed digits kept), a hint (+5 instead of
   +10), a wrong answer with no hint (−10, correct answer shown), finishing,
-  Race Again, Quit, and a shop purchase. Desktop checks Grade 3 persistence, a
-  keyboard-typed answer (+6) and drawing with the mouse. It also checks that
+  Race Again, Quit, and a shop purchase. Desktop checks WebGL boot, then (on
+  Canvas, because CI has no GPU and software WebGL takes 10+ s to start a
+  race) Grade 3 persistence, a keyboard-typed answer (+6) and drawing with
+  the mouse. It also checks that
   the phone layout fits on screen and that a broken or missing bundle shows
   the error card.
 - Headless Chrome is not Safari 12. The syntax check covers the parse error;

@@ -509,8 +509,11 @@ async function desktop(browser, baseUrl) {
     await click(page, MENU.grade7[0], MENU.grade7[1]);
     await click(page, MENU.grade3[0], MENU.grade3[1]);
     await page.waitForTimeout(150);
-    await page.reload({ waitUntil: 'load' });
+    // CI has no GPU, so WebGL is software-rendered and a race takes 10+ s to
+    // start there. Boot on WebGL is checked above; play on Canvas.
+    await page.goto(baseUrl + '?renderer=canvas', { waitUntil: 'load' });
     await waitForBoot(page);
+    await page.waitForTimeout(300);
     check(await savedGrade() === 3 && await race(page, () => window.mathKart.game.scene.getScene('MenuScene').grade === 3),
         'switching Grade 7 -> Grade 3 with the mouse persists across a reload');
 
