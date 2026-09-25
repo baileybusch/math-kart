@@ -1,22 +1,11 @@
-name: Deploy to GitHub Pages
+name: CI
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages-deploy
-  cancel-in-progress: false
-
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,7 +23,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Never ship JS that iOS 12 Safari (old iPad mini) can't parse.
       - name: Check legacy bundle (no ?. / ??, ES2017 syntax only)
         run: npm run check:legacy
 
@@ -50,9 +38,3 @@ jobs:
           name: smoke-screenshots
           path: smoke-screenshots
           if-no-files-found: ignore
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
