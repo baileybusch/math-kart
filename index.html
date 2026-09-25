@@ -159,6 +159,113 @@
             user-select: text;
         }
 
+        /* Scratch whiteboard (src/ui/whiteboard.js). */
+        .mk-wb {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 15;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            background: #1d2b53;
+        }
+        .mk-wb-bar {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-box-pack: justify;
+            -webkit-justify-content: space-between;
+            justify-content: space-between;
+            padding: 8px 10px;
+            min-height: 84px;
+            -webkit-flex-shrink: 0;
+            flex-shrink: 0;
+        }
+        .mk-wb-tools {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-flex-wrap: wrap;
+            flex-wrap: wrap;
+        }
+        .mk-wb-btn {
+            font-family: inherit;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1d2b53;
+            background: #ffffff;
+            border: 4px solid #1d2b53;
+            border-radius: 18px;
+            min-width: 96px;
+            height: 64px;
+            margin: 2px 8px 2px 0;
+            padding: 0 14px;
+            box-shadow: 0 5px 0 #0b1330;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+        .mk-wb-btn:active {
+            -webkit-transform: translateY(3px);
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #0b1330;
+        }
+        .mk-wb-btn.is-on {
+            background: #ffd43b;
+        }
+        .mk-wb-red {
+            color: #e03131;
+        }
+        .mk-wb-done {
+            color: #ffffff;
+            background: #2fb344;
+            min-width: 150px;
+            font-size: 28px;
+            margin-right: 0;
+        }
+        .mk-wb-pad {
+            position: relative;
+            -webkit-box-flex: 1;
+            -webkit-flex: 1;
+            flex: 1;
+            background-color: #fffef6;
+            background-image: linear-gradient(rgba(29, 43, 83, 0.13) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(29, 43, 83, 0.13) 1px, transparent 1px);
+            background-size: 40px 40px;
+            border-radius: 18px 18px 0 0;
+            overflow: hidden;
+        }
+        .mk-wb-pad.mk-wb-nogrid {
+            background-image: none;
+        }
+        .mk-wb-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+        }
+        .mk-wb-question {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            max-width: 70%;
+            padding: 8px 14px;
+            border-radius: 14px;
+            background: rgba(29, 43, 83, 0.82);
+            color: #ffffff;
+            font-size: 20px;
+            line-height: 1.3;
+            pointer-events: none;
+        }
+
         #mk-rotate {
             display: none;
             position: absolute;
@@ -317,7 +424,7 @@
 
     <div id="mk-rotate">Turn your device sideways for a bigger track!</div>
 
-  <script crossorigin id="vite-legacy-polyfill" src="/math-kart/assets/polyfills-legacy-9JSTWuAV.js"></script>
-  <script crossorigin id="vite-legacy-entry" data-src="/math-kart/assets/index-legacy-CIBFJ4C9.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+  <script crossorigin id="vite-legacy-polyfill" src="/math-kart/assets/polyfills-legacy-C0LMcZz2.js"></script>
+  <script crossorigin id="vite-legacy-entry" data-src="/math-kart/assets/index-legacy-DwEI9r3G.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
 </body>
 </html>
