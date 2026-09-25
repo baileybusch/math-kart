@@ -9,9 +9,13 @@ import { GRADES, getProblemForGrade } from '../src/math/grades.js';
 import { checkAnswer, parseTypedNumber, formatNumber, toleranceFor } from '../src/math/answers.js';
 import { coinDelta, coinRules } from '../src/math/economy.js';
 import similarFigures, { YES, NO } from '../src/math/similarFigures.js';
-import { COURSE_ORDER, STARTER_COURSE, ROAD_WIDTH, allCourses, courseGeometry, courseStatus } from '../src/game/courses.js';
-import { stepKart, updateProgress, reachedCheckpoint, kartStats, BOUNDS_MARGIN } from '../src/game/raceLogic.js';
-import { pointAt } from '../src/game/trackMath.js';
+import { COURSE_ORDER, STARTER_COURSE, ROAD_WIDTH, allCourses, courseGeometry, courseStatus, courseHazards } from '../src/game/courses.js';
+import {
+    stepKart, updateProgress, updateFeatures, reachedCheckpoint, kartStats, stepAI,
+    BOUNDS_MARGIN, CHECKPOINT_RADIUS, WATER_SPEED, OFFROAD_SPEED
+} from '../src/game/raceLogic.js';
+import { bridgeOffset, onBypass, surfaceAt, RAMP_TYPES } from '../src/game/features.js';
+import { pointAt, distanceToLoop, distanceToPolyline, segmentIntersection } from '../src/game/trackMath.js';
 
 let failures = 0;
 function check(cond, msg) {
@@ -150,34 +154,71 @@ Object.keys(similarFigures.generators).forEach((name) => {
 
 // ------------------------------------------------------------ courses
 
-function segDist(a, b, c, d) {
-    const pointSeg = (p, s, e) => {
+function closest(a, b, c, d) {
+    const x = segmentIntersection(a, b, c, d);
+    if (x) return { dist: 0, p: x, q: x };
+    const onSeg = (p, s, e) => {
         const dx = e.x - s.x; const dy = e.y - s.y;
-        let t = ((p.x - s.x) * dx + (p.y - s.y) * dy) / (dx * dx + dy * dy);
+        let t = ((p.x - s.x) * dx + (p.y - s.y) * dy) / (dx * dx + dy * dy || 1);
         t = Math.max(0, Math.min(1, t));
-        return Math.hypot(p.x - (s.x + dx * t), p.y - (s.y + dy * t));
+        return { x: s.x + dx * t, y: s.y + dy * t };
     };
-    const cross = (o, p, q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
-    const intersects = cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0;
-    if (intersects) return 0;
-    return Math.min(pointSeg(a, c, d), pointSeg(b, c, d), pointSeg(c, a, b), pointSeg(d, a, b));
+    const opts = [[a, onSeg(a, c, d)], [b, onSeg(b, c, d)], [onSeg(c, a, b), c], [onSeg(d, a, b), d]];
+    let best = null;
+    opts.forEach(([p, q]) => {
+        const dist = Math.hypot(p.x - q.x, p.y - q.y);
+        if (!best || dist < best.dist) best = { dist, p, q };
+    });
+    return best;
 }
 
-/** Drives two laps with a look-ahead autopilot using the game's own rules. */
-function simulateRace(geo, stats) {
-    const loop = geo.loop;
-    const start = pointAt(loop, -70);
-    const kart = Object.assign({
+function heading(loop, along) {
+    const p = pointAt(loop, along);
+    return Math.atan2(p.dirY, p.dirX);
+}
+
+/** Largest heading change (degrees) between two distances along the loop. */
+function maxBend(loop, from, to) {
+    const h0 = heading(loop, from);
+    let worst = 0;
+    for (let d = from; d <= to; d += 10) {
+        let diff = Math.abs(heading(loop, d) - h0);
+        if (diff > Math.PI) diff = 2 * Math.PI - diff;
+        worst = Math.max(worst, diff);
+    }
+    return worst * 180 / Math.PI;
+}
+
+const cyc = (a, b, L) => {
+    const d = Math.abs(((a - b) % L + L) % L);
+    return Math.min(d, L - d);
+};
+
+function newKart(geo, stats) {
+    const start = pointAt(geo.loop, -70);
+    return Object.assign({
         x: start.x + start.normX * 48, y: start.y + start.normY * 48,
         rotation: Math.atan2(start.dirX, -start.dirY), speed: 0,
-        segHint: loop.segs.length - 1, along: -70, offRoad: false
+        segHint: geo.loop.segs.length - 1, along: -70, offRoad: false
     }, stats);
+}
+
+/**
+ * Drives two laps with a look-ahead autopilot using the game's own rules.
+ * With `bridge` it aims along the bridge side road instead of the ford.
+ */
+function simulateRace(geo, stats, opts) {
+    const loop = geo.loop;
+    const useBridge = !!(opts && opts.bridge);
+    const kart = newKart(geo, stats);
     const race = { lap: 0, cpInLap: 0 };
     const dt = 1 / 60;
-    const out = { checkpoints: 0, finished: false, time: 0, offRoadFrames: 0, clampedFrames: 0, frames: 0 };
-    for (let f = 0; f < 60 * 240 && !out.finished; f++) {
-        const target = pointAt(loop, kart.along + 240);
-        const want = Math.atan2(target.x - kart.x, -(target.y - kart.y));
+    const out = { checkpoints: 0, finished: false, time: 0, offRoadFrames: 0, clampedFrames: 0, frames: 0, wetFrames: 0, airFrames: 0, kart };
+    for (let f = 0; f < 60 * 300 && !out.finished; f++) {
+        const aim = kart.along + 240;
+        const target = pointAt(loop, aim);
+        const off = useBridge ? bridgeOffset(geo.features, aim, loop.total) : 0;
+        const want = Math.atan2(target.x + target.normX * off - kart.x, -(target.y + target.normY * off - kart.y));
         let diff = want - kart.rotation;
         while (diff > Math.PI) diff -= 2 * Math.PI;
         while (diff < -Math.PI) diff += 2 * Math.PI;
@@ -185,61 +226,277 @@ function simulateRace(geo, stats) {
         stepKart(kart, input, dt, geo.width, geo.height);
         if (kart.x <= BOUNDS_MARGIN || kart.y <= BOUNDS_MARGIN || kart.x >= geo.width - BOUNDS_MARGIN || kart.y >= geo.height - BOUNDS_MARGIN) out.clampedFrames++;
         if (updateProgress(race, kart, geo) && race.lap >= 2) out.finished = true;
+        updateFeatures(kart, geo);
         if (reachedCheckpoint(race, kart, geo)) { race.cpInLap++; out.checkpoints++; }
-        if (kart.offRoad) out.offRoadFrames++;
+        if (kart.offRoad && !(kart.air > 0)) out.offRoadFrames++;
+        if (kart.inWater) out.wetFrames++;
+        if (kart.air > 0) out.airFrames++;
         out.frames++;
     }
     out.time = out.frames * dt;
+    out.jumps = kart.jumps || 0;
+    out.splashes = kart.splashes || 0;
     return out;
+}
+
+function simulateAI(geo, opts) {
+    const ai = { baseSpeed: opts.speed, lane: opts.lane, along: opts.along, useBridge: opts.useBridge, wobble: 0, air: 0, boost: 0 };
+    const dt = 1 / 60;
+    let frames = 0;
+    let backwards = 0;
+    let slowest = Infinity;
+    while (ai.along < 2 * geo.loop.total && frames < 60 * 300) {
+        const before = ai.along;
+        stepAI(ai, geo, dt, ai.along);
+        if (ai.along <= before) backwards++;
+        slowest = Math.min(slowest, ai.speed);
+        frames++;
+    }
+    return { finished: ai.along >= 2 * geo.loop.total, time: frames * dt, backwards, slowest, jumps: ai.jumps || 0, wetFrames: ai.wetFrames || 0 };
 }
 
 console.log('\n[courses and unlock ladder]');
 ok(COURSE_ORDER.length >= 4 && COURSE_ORDER[0] === STARTER_COURSE && COURSE_ORDER.indexOf('desert') === 1, 'at least 4 courses, starter first, Desert second: ' + COURSE_ORDER.join(' > '));
 const costs = allCourses().map((c) => c.cost);
-ok(costs[0] === 0 && costs.every((c, i) => i === 0 || c > costs[i - 1]), 'unlock costs escalate: ' + costs.join(', '));
+ok(costs.join(',') === '0,100,250,450,700', 'unlock ladder is still 0 / 100 / 250 / 450 / 700: ' + costs.join(', '));
 ok(allCourses().every((c, i, all) => i === 0 || c.prizes[0] >= all[i - 1].prizes[0]), 'later courses pay at least as much for 1st place');
 ok(courseStatus('desert', ['forest']) === 'next' && courseStatus('pine', ['forest']) === 'later' &&
     courseStatus('pine', ['forest', 'desert']) === 'next' && courseStatus('forest', []) === 'unlocked', 'ladder: each course needs the one before it');
 const palettes = allCourses().map((c) => c.palette.ground);
 ok(new Set(palettes).size === palettes.length, 'every course has its own ground colour');
 
+const summary = {};
 allCourses().forEach((c) => {
     const before = failures;
     const geo = courseGeometry(c.id);
+    const loop = geo.loop;
+    const L = loop.total;
     const pts = geo.points;
     const n = pts.length;
-    const edge = ROAD_WIDTH / 2 + 60;
-    pts.forEach((p, i) => check(p.x >= edge && p.y >= edge && p.x <= c.width - edge && p.y <= c.height - edge,
-        c.id + ': waypoint ' + i + ' (' + p.x + ',' + p.y + ') keeps the road inside the course'));
+    const f = geo.features;
+    const hw = ROAD_WIDTH / 2;
+    const edge = hw + 60;
+    const inside = (p) => p.x >= edge && p.y >= edge && p.x <= c.width - edge && p.y <= c.height - edge;
+    pts.forEach((p, i) => check(inside(p), c.id + ': waypoint ' + i + ' (' + p.x + ',' + p.y + ') keeps the road inside the course'));
+
+    // Road pieces that aren't the same stretch of road never touch, except
+    // at a planned figure-8 crossing (which must be a clear, wide angle).
+    const crossings = [];
+    const close = [];
     let minGap = Infinity;
     for (let i = 0; i < n; i++) {
-        for (let j = i + 3; j < n; j++) {
-            if ((i + n - j) % n < 3) continue;
-            const d = segDist(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]);
-            minGap = Math.min(minGap, d);
-            check(d >= ROAD_WIDTH + 60, c.id + ': roads ' + i + ' and ' + j + ' stay apart (' + Math.round(d) + ')');
+        for (let j = i + 1; j < n; j++) {
+            const si = loop.segs[i]; const sj = loop.segs[j];
+            const sep = cyc(si.start + si.len / 2, sj.start + sj.len / 2, L) - (si.len + sj.len) / 2;
+            if (sep < 450) continue;
+            const r = closest(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]);
+            if (r.dist === 0) {
+                const angle = Math.acos(Math.abs(si.dx * sj.dx + si.dy * sj.dy)) * 180 / Math.PI;
+                const alongs = [si.start + Math.hypot(r.p.x - si.ax, r.p.y - si.ay), sj.start + Math.hypot(r.p.x - sj.ax, r.p.y - sj.ay)];
+                if (!crossings.some((x) => Math.hypot(x.x - r.p.x, x.y - r.p.y) < 60)) crossings.push({ x: r.p.x, y: r.p.y, angle, alongs });
+            }
+            if (r.dist < ROAD_WIDTH + 60) close.push(r);
+            else minGap = Math.min(minGap, r.dist);
         }
     }
+    check(crossings.length === (c.crossings || 0), c.id + ': road crosses itself ' + crossings.length + ' time(s) (planned ' + (c.crossings || 0) + ')');
+    crossings.forEach((x) => check(x.angle >= 55, c.id + ': crossing at (' + Math.round(x.x) + ',' + Math.round(x.y) + ') is at a clear angle (' + Math.round(x.angle) + ' deg)'));
+    close.forEach((r) => {
+        const near = crossings.some((x) => {
+            const zone = (ROAD_WIDTH + 60) / Math.sin(x.angle * Math.PI / 180) + 40;
+            return Math.hypot(r.p.x - x.x, r.p.y - x.y) < zone && Math.hypot(r.q.x - x.x, r.q.y - x.y) < zone;
+        });
+        check(near, c.id + ': separate roads stay apart near (' + Math.round(r.p.x) + ',' + Math.round(r.p.y) + ') (' + Math.round(r.dist) + ')');
+    });
+
     let maxTurn = 0;
+    let minRadius = Infinity;
     for (let i = 0; i < n; i++) {
         const a = pts[(i + n - 1) % n]; const b = pts[i]; const d = pts[(i + 1) % n];
-        const t = Math.abs(Math.atan2((b.x - a.x) * (d.y - b.y) - (b.y - a.y) * (d.x - b.x), (b.x - a.x) * (d.x - b.x) + (b.y - a.y) * (d.y - b.y))) * 180 / Math.PI;
-        maxTurn = Math.max(maxTurn, t);
-        check(t <= 100, c.id + ': turn at waypoint ' + i + ' is gentle enough (' + Math.round(t) + ' deg)');
+        const t = Math.abs(Math.atan2((b.x - a.x) * (d.y - b.y) - (b.y - a.y) * (d.x - b.x), (b.x - a.x) * (d.x - b.x) + (b.y - a.y) * (d.y - b.y)));
+        maxTurn = Math.max(maxTurn, t * 180 / Math.PI);
+        check(t * 180 / Math.PI <= 100, c.id + ': turn at waypoint ' + i + ' is gentle enough (' + Math.round(t * 180 / Math.PI) + ' deg)');
     }
-    const fr = geo.checkpoints.map((cp) => cp.along / geo.loop.total);
-    check(fr.every((f, i) => f > 0.12 && f < 0.92 && (i === 0 || f - fr[i - 1] >= 0.15)), c.id + ': checkpoints spread around the lap (' + fr.map((f) => f.toFixed(2)).join(', ') + ')');
+    for (let d = 0; d < L; d += 10) {
+        const a = pointAt(loop, d - 50); const b = pointAt(loop, d); const e = pointAt(loop, d + 50);
+        const area2 = Math.abs((b.x - a.x) * (e.y - a.y) - (b.y - a.y) * (e.x - a.x));
+        if (area2 > 1) minRadius = Math.min(minRadius, Math.hypot(b.x - a.x, b.y - a.y) * Math.hypot(e.x - b.x, e.y - b.y) * Math.hypot(e.x - a.x, e.y - a.y) / (2 * area2));
+    }
+    check(minRadius >= 140, c.id + ': tightest bend radius ' + Math.round(minRadius) + ' >= 140');
+    check(maxBend(loop, -220, 60) < 3, c.id + ': the karts start on a straight (' + maxBend(loop, -220, 60).toFixed(1) + ' deg)');
+
+    // Stars: spread round the lap, only reachable from their own stretch of
+    // road, and never on a ramp, in the river or on the bridge detour.
+    const fr = geo.checkpoints.map((cp) => cp.along / L);
+    check(fr.every((x, i) => x > 0.12 && x < 0.92 && (i === 0 || x - fr[i - 1] >= 0.15)), c.id + ': checkpoints spread around the lap (' + fr.map((x) => x.toFixed(2)).join(', ') + ')');
+    geo.checkpoints.forEach((cp) => {
+        let other = Infinity;
+        for (let d = 0; d < L; d += 20) {
+            if (cyc(d, cp.along, L) < 700) continue;
+            const p = pointAt(loop, d);
+            other = Math.min(other, Math.hypot(p.x - cp.x, p.y - cp.y));
+        }
+        check(other > CHECKPOINT_RADIUS + hw + 40, c.id + ': star ' + cp.label + ' can only be reached from its own road (' + Math.round(other) + ' px to the next road)');
+        f.ramps.forEach((r) => check(cyc(r.along, cp.along, L) > 320, c.id + ': star ' + cp.label + ' is away from ramp ' + r.id));
+        if (f.river) check(cyc(f.river.at, cp.along, L) > (f.bridge ? f.bridge.half + 150 : 350), c.id + ': star ' + cp.label + ' is away from the river and bridge');
+        crossings.forEach((x) => x.alongs.forEach((a) => check(cyc(a, cp.along, L) > 450, c.id + ': star ' + cp.label + ' is away from the crossing')));
+    });
+
+    // Ramps sit on straights with room to land.
+    f.ramps.forEach((r) => {
+        const landing = r.kind === 'jump' ? 360 : 160;
+        const bend = maxBend(loop, r.along - 80, r.along + landing);
+        check(bend < 20, c.id + ': ' + r.kind + ' ' + r.id + ' at ' + (r.along / L).toFixed(3) + ' is on a straight with room to land (' + bend.toFixed(1) + ' deg)');
+        if (f.river) check(cyc(r.along, f.river.at, L) > f.bridge.half + 200, c.id + ': ' + r.kind + ' ' + r.id + ' is away from the river');
+        f.ramps.forEach((o) => check(o === r || cyc(o.along, r.along, L) >= 200, c.id + ': ' + r.kind + ' ' + r.id + ' is at least 200 px from the next ramp, so fast karts land in between'));
+        crossings.forEach((x) => x.alongs.forEach((a) => check(cyc(a, r.along, L) > 300, c.id + ': ' + r.kind + ' ' + r.id + ' is away from the crossing')));
+    });
+
+    if (f.river) {
+        const rv = f.river;
+        const b = f.bridge;
+        const roadX = [];
+        const bypassX = [];
+        const addHit = (list, x) => { if (x && !list.some((q) => Math.hypot(q.x - x.x, q.y - x.y) < 5)) list.push(x); };
+        for (let k = 0; k < rv.points.length - 1; k++) {
+            for (let i = 0; i < n; i++) addHit(roadX, segmentIntersection(rv.points[k], rv.points[k + 1], pts[i], pts[(i + 1) % n]));
+            for (let i = 0; i < b.points.length - 1; i++) addHit(bypassX, segmentIntersection(rv.points[k], rv.points[k + 1], b.points[i], b.points[i + 1]));
+        }
+        const roadHits = roadX.length;
+        const bypassHits = bypassX.length;
+        check(roadHits === 1, c.id + ': river crosses the road exactly once (' + roadHits + ')');
+        check(bypassHits === 1 && b.deck.length >= 4, c.id + ': bridge road crosses the river once, on a bridge deck (' + bypassHits + ', deck ' + b.deck.length + ' pts)');
+        check(maxBend(loop, b.from - 40, b.to + 40) < 12, c.id + ': the river and bridge are on a straight (' + maxBend(loop, b.from - 40, b.to + 40).toFixed(1) + ' deg)');
+        b.points.forEach((p, i) => check(inside(p), c.id + ': bridge road point ' + i + ' is inside the course'));
+        rv.points.forEach((p) => {
+            const onFord = Math.hypot(p.x - rv.cx, p.y - rv.cy) < rv.width + hw;
+            if (!onFord && !onBypass(f, p.x, p.y)) check(distanceToLoop(loop, p.x, p.y) > hw + rv.width / 2 + 20, c.id + ': river only meets the road at the ford (' + Math.round(p.x) + ',' + Math.round(p.y) + ')');
+        });
+        if (rv.pond) check(distanceToLoop(loop, rv.pond.x, rv.pond.y) > rv.pond.r + hw + 40 && distanceToPolyline(b.points, rv.pond.x, rv.pond.y) > rv.pond.r + hw + 30, c.id + ': pond sits clear of the roads');
+        const apart = b.points.filter((p) => p.off >= ROAD_WIDTH);
+        let bypassRadius = Infinity;
+        for (let i = 3; i < b.points.length - 3; i++) {
+            const a = b.points[i - 3]; const m = b.points[i]; const e = b.points[i + 3];
+            const area2 = Math.abs((m.x - a.x) * (e.y - a.y) - (m.y - a.y) * (e.x - a.x));
+            if (area2 > 1) bypassRadius = Math.min(bypassRadius, Math.hypot(m.x - a.x, m.y - a.y) * Math.hypot(e.x - m.x, e.y - m.y) * Math.hypot(e.x - a.x, e.y - a.y) / (2 * area2));
+        }
+        check(bypassRadius >= 150, c.id + ': bridge road bends are gentle (r=' + Math.round(bypassRadius) + ')');
+        const d0 = b.deck[0]; const d1 = b.deck[b.deck.length - 1];
+        check(b.deck.every((p) => Math.abs(p.off - b.offset) < 1), c.id + ': the bridge deck is straight, parallel to the road (' + Math.round(Math.hypot(d1.x - d0.x, d1.y - d0.y)) + ' px long)');
+        for (let d = 0; d < L; d += 20) {
+            if (d > b.from - 100 && d < b.to + 100) continue;
+            const p = pointAt(loop, d);
+            check(distanceToPolyline(apart, p.x, p.y) > ROAD_WIDTH + 60, c.id + ': bridge road stays away from the rest of the track (along ' + d + ')');
+        }
+        const mid = b.deck[Math.floor(b.deck.length / 2)];
+        check(surfaceAt(f, rv.cx, rv.cy) === 'water' && surfaceAt(f, mid.x, mid.y) === 'bridge', c.id + ': ford is water, bridge deck is not');
+        const gapAtPeak = b.offset - ROAD_WIDTH - 26;
+        check(gapAtPeak >= 50, c.id + ': there is a visible island between the ford and the bridge road (' + gapAtPeak + ' px)');
+    }
 
     const base = simulateRace(geo, kartStats({ speedUpgrades: 0, handlingUpgrades: 0 }));
     const fast = simulateRace(geo, kartStats({ speedUpgrades: 5, handlingUpgrades: 0 }));
-    [['base kart', base], ['max speed, no steering', fast]].forEach(([label, r]) => {
+    const runs = [['base kart', base], ['max speed, no steering', fast]];
+    let bridgeRun = null;
+    if (f.bridge) {
+        bridgeRun = simulateRace(geo, kartStats({ speedUpgrades: 0, handlingUpgrades: 0 }), { bridge: true });
+        runs.push(['base kart over the bridge', bridgeRun]);
+    }
+    runs.forEach(([label, r]) => {
         check(r.finished && r.checkpoints === 2 * geo.checkpoints.length, c.id + ' (' + label + '): autopilot reaches all ' + 2 * geo.checkpoints.length + ' checkpoints and finishes (' + r.checkpoints + ')');
         check(r.clampedFrames === 0, c.id + ' (' + label + '): never pushed against the course edge');
         check(r.offRoadFrames / r.frames < 0.12, c.id + ' (' + label + '): stays on the road (' + Math.round(100 * r.offRoadFrames / r.frames) + '% off-road)');
+        check(r.jumps === 2 * f.ramps.length, c.id + ' (' + label + '): takes off from every ramp and bump on both laps (' + r.jumps + ' of ' + 2 * f.ramps.length + ')');
     });
-    ok(failures === before, c.name + ' (' + c.cost + ' coins): ' + n + ' waypoints, road gap ' + Math.round(minGap) + ', sharpest turn ' + Math.round(maxTurn) +
-        ' deg, 2 laps in ' + Math.round(base.time) + ' s (' + Math.round(100 * base.offRoadFrames / base.frames) + '% off-road)');
+    if (f.river) {
+        check(base.splashes === 2 && base.wetFrames > 0, c.id + ': driving straight through the ford gets wet on both laps (' + base.splashes + ' splashes)');
+        check(bridgeRun.splashes === 0, c.id + ': the bridge route stays dry (' + bridgeRun.splashes + ' splashes)');
+        check(bridgeRun.time < base.time - 0.6, c.id + ': the bridge is faster than wading (' + bridgeRun.time.toFixed(1) + ' s vs ' + base.time.toFixed(1) + ' s)');
+    }
+
+    const ais = [
+        ['Zoom', { speed: 225 * c.aiSpeed, lane: -48, along: -70, useBridge: true }],
+        ['Bolt', { speed: 205 * c.aiSpeed, lane: 0, along: -170, useBridge: false }]
+    ].map(([name, o]) => {
+        const r = simulateAI(geo, o);
+        check(r.finished && r.backwards === 0 && r.slowest > 0.4 * o.speed, c.id + ': AI ' + name + ' always moves forward and finishes (' + r.time.toFixed(1) + ' s, slowest ' + Math.round(r.slowest) + ')');
+        check(r.jumps === 2 * f.ramps.length, c.id + ': AI ' + name + ' hops every ramp (' + r.jumps + ')');
+        if (f.river) check(o.useBridge ? r.wetFrames === 0 : r.wetFrames > 0, c.id + ': AI ' + name + (o.useBridge ? ' takes the bridge' : ' wades through the ford') + ' (' + r.wetFrames + ' wet frames)');
+        return r;
+    });
+
+    summary[c.id] = { lap: Math.round(L), hazards: courseHazards(c.id), time: base.time };
+    ok(failures === before, c.name + ' (' + c.cost + ' coins): lap ' + Math.round(L) + ' px, ' + courseHazards(c.id).join(', ') +
+        ', road gap ' + Math.round(minGap) + ', tightest bend r=' + Math.round(minRadius) +
+        ', 2 laps in ' + Math.round(base.time) + ' s' + (bridgeRun ? ' (' + Math.round(bridgeRun.time) + ' s via bridge)' : '') +
+        ' (' + Math.round(100 * base.offRoadFrames / base.frames) + '% off-road), AI ' + ais.map((r) => Math.round(r.time) + ' s').join(' / '));
 });
+
+console.log('\n[tracks feel different]');
+const laps = COURSE_ORDER.map((id) => summary[id].lap);
+ok(Math.max.apply(null, laps) / Math.min.apply(null, laps) >= 1.45, 'lap lengths vary a lot (' + laps.join(', ') + ' px)');
+ok(new Set(COURSE_ORDER.map((id) => summary[id].hazards.join('+'))).size === COURSE_ORDER.length, 'every track has its own mix of features: ' + COURSE_ORDER.map((id) => id + '=' + summary[id].hazards.join('+')).join('; '));
+ok(courseHazards('forest').indexOf('river + bridge') !== -1 && courseHazards('pine').indexOf('river + bridge') !== -1, 'rivers with bridges on Meadow and Pine');
+ok(courseHazards('desert').indexOf('jumps') !== -1 && courseHazards('city').indexOf('jumps') !== -1, 'jump ramps on Desert and Night City');
+ok(courseHazards('snow').indexOf('figure 8') !== -1, 'Snow Circuit is a figure 8');
+
+console.log('\n[water, bridge and jumps]');
+{
+    const geo = courseGeometry('forest');
+    const f = geo.features;
+    const stats = kartStats({ speedUpgrades: 0, handlingUpgrades: 0 });
+    const rv = f.river;
+    const wading = Object.assign({ x: rv.cx, y: rv.cy, rotation: Math.atan2(rv.dirX, -rv.dirY), speed: stats.maxSpeed, segHint: 0 }, stats);
+    let top = 0;
+    for (let i = 0; i < 60; i++) {
+        wading.x = rv.cx; wading.y = rv.cy;
+        updateProgress({ lap: 0, cpInLap: 0 }, wading, geo);
+        updateFeatures(wading, geo);
+        stepKart(wading, { forward: true }, 1 / 60, geo.width, geo.height);
+        if (i > 30) top = Math.max(top, wading.speed);
+    }
+    ok(wading.inWater && !wading.offRoad && top <= stats.maxSpeed * WATER_SPEED + 0.01, 'in the ford the top speed drops to ' + Math.round(WATER_SPEED * 100) + '% (' + Math.round(top) + ' of ' + stats.maxSpeed + ')');
+    const mid = f.bridge.deck[Math.floor(f.bridge.deck.length / 2)];
+    const dry = Object.assign({ x: mid.x, y: mid.y, rotation: 0, speed: 0, segHint: 0 }, stats);
+    for (let i = 0; i < 150; i++) {
+        dry.x = mid.x; dry.y = mid.y;
+        updateProgress({ lap: 0, cpInLap: 0 }, dry, geo);
+        updateFeatures(dry, geo);
+        stepKart(dry, { forward: true }, 1 / 60, geo.width, geo.height);
+    }
+    ok(dry.onBridge && !dry.inWater && !dry.offRoad && dry.speed === stats.maxSpeed, 'on the bridge deck there is no slow-down and it counts as road (' + Math.round(dry.speed) + ')');
+    ok(OFFROAD_SPEED > WATER_SPEED, 'water (' + WATER_SPEED + 'x) is slower than grass (' + OFFROAD_SPEED + 'x)');
+}
+{
+    const geo = courseGeometry('desert');
+    const r = geo.features.ramps.find((x) => x.kind === 'jump');
+    const stats = kartStats({ speedUpgrades: 0, handlingUpgrades: 0 });
+    const k = Object.assign({ x: r.x - r.dirX * 150, y: r.y - r.dirY * 150, rotation: Math.atan2(r.dirX, -r.dirY), speed: stats.maxSpeed, segHint: 0 }, stats);
+    const race = { lap: 0, cpInLap: 0 };
+    let peak = 0; let airborne = 0; let landing = null; let knocked = false;
+    for (let i = 0; i < 60 * 3; i++) {
+        updateProgress(race, k, geo);
+        updateFeatures(k, geo);
+        if (k.air > 0) {
+            airborne++;
+            if (!knocked) { knocked = true; k.rotation += 0.5; }
+        } else if (airborne && !landing) {
+            landing = { err: Math.abs(Math.atan2(Math.sin(k.rotation - k.roadHeading), Math.cos(k.rotation - k.roadHeading))), offRoad: k.offRoad };
+        }
+        peak = Math.max(peak, k.speed);
+        const err = Math.atan2(Math.sin(k.roadHeading - k.rotation), Math.cos(k.roadHeading - k.rotation));
+        stepKart(k, { forward: true, left: !(k.air > 0) && err < -0.03, right: !(k.air > 0) && err > 0.03 }, 1 / 60, geo.width, geo.height);
+    }
+    ok(k.jumps === 1 && airborne >= 40 && airborne <= 50, 'a jump ramp launches the kart once, for about ' + (r.air * 1000) + ' ms (' + airborne + ' frames)');
+    ok(peak > stats.maxSpeed * 1.15 && peak <= stats.maxSpeed * r.boost + 0.01, 'take-off gives a speed boost (' + Math.round(peak) + ' vs top speed ' + stats.maxSpeed + ')');
+    ok(k.speed === stats.maxSpeed, 'the boost wears off back to normal top speed after landing (' + Math.round(k.speed) + ')');
+    ok(landing && !landing.offRoad && landing.err < 0.2, 'forgiving landing: a kart knocked 0.5 rad off line in the air lands on the road pointing down it (' + (landing ? landing.err.toFixed(2) : '?') + ' rad off)');
+    const slow = Object.assign({ x: r.x - r.dirX * 60, y: r.y - r.dirY * 60, rotation: Math.atan2(r.dirX, -r.dirY), speed: 40, segHint: 0 }, stats);
+    for (let i = 0; i < 60; i++) { updateProgress(race, slow, geo); updateFeatures(slow, geo); stepKart(slow, { forward: false }, 1 / 60, geo.width, geo.height); }
+    ok(!slow.jumps, 'creeping over a ramp slower than ' + r.minSpeed + ' just rolls over it');
+    const bump = RAMP_TYPES.bump;
+    ok(bump.air < RAMP_TYPES.jump.air && bump.boost < RAMP_TYPES.jump.boost, 'bumps are smaller hops than jumps (' + bump.air + ' s vs ' + RAMP_TYPES.jump.air + ' s)');
+}
 
 if (failures) {
     console.error('\nUNIT TESTS FAILED (' + failures + ')');

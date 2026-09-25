@@ -4,10 +4,12 @@ import { getProblemForGrade, getGrade } from '../math/grades.js';
 import { coinDelta, coinRules } from '../math/economy.js';
 import { createTrack } from '../game/trackBuilder.js';
 import { pointAt } from '../game/trackMath.js';
-import { kartStats, stepKart, updateProgress, reachedCheckpoint } from '../game/raceLogic.js';
+import {
+    kartStats, stepKart, updateProgress, updateFeatures, reachedCheckpoint, airHeight
+} from '../game/raceLogic.js';
 import { courseStatus } from '../game/courses.js';
 import AIKart from '../game/AIKart.js';
-import { COLORS, drawKart, kartColor } from '../ui/theme.js';
+import { COLORS, FONT, drawKart, kartColor } from '../ui/theme.js';
 
 export const LAPS = 2;
 
@@ -37,6 +39,8 @@ export default class RaceScene extends Phaser.Scene {
         this.inMathStop = false;
         this.finishOrder = [];
         this.stats = { correct: 0, asked: 0, hints: 0 };
+        this.shownTips = {};
+        this.lastSplash = 0;
         this.hud = null;
 
         this.track = createTrack(this, this.courseId);
@@ -45,8 +49,8 @@ export default class RaceScene extends Phaser.Scene {
 
         this.player = this.createPlayer(save);
         this.aiKarts = [
-            new AIKart(this, this.track, { name: 'Zoom', color: COLORS.orange, speed: 225 * this.track.aiSpeed, lane: -48, along: -70 }),
-            new AIKart(this, this.track, { name: 'Bolt', color: COLORS.blue, speed: 205 * this.track.aiSpeed, lane: 0, along: -170 })
+            new AIKart(this, this.track, { name: 'Zoom', color: COLORS.orange, speed: 225 * this.track.aiSpeed, lane: -48, along: -70, useBridge: true }),
+            new AIKart(this, this.track, { name: 'Bolt', color: COLORS.blue, speed: 205 * this.track.aiSpeed, lane: 0, along: -170, useBridge: false })
         ];
 
         this.arrow = this.add.graphics();
@@ -76,6 +80,7 @@ export default class RaceScene extends Phaser.Scene {
 
     createPlayer(save) {
         const start = pointAt(this.track.loop, -70);
+        this.playerShadow = this.add.ellipse(0, 0, 50, 34, 0x000000, 0.28).setDepth(4).setVisible(false);
         const kart = drawKart(this.add.graphics(), kartColor(save.currentColor));
         kart.x = start.x + start.normX * 48;
         kart.y = start.y + start.normY * 48;
@@ -87,6 +92,9 @@ export default class RaceScene extends Phaser.Scene {
         kart.segHint = this.track.loop.segs.length - 1;
         kart.along = -70;
         kart.offRoad = false;
+        kart.air = 0;
+        kart.boost = 0;
+        kart.inWater = false;
         return kart;
     }
 
@@ -118,6 +126,7 @@ export default class RaceScene extends Phaser.Scene {
         if (!this.isPaused) {
             this.drivePlayer(dt);
             this.trackPlayerProgress();
+            this.handleFeatures(time);
             const progress = this.playerProgress;
             this.aiKarts.forEach((ai) => {
                 ai.update(dt, progress);
@@ -128,6 +137,7 @@ export default class RaceScene extends Phaser.Scene {
             });
             this.checkCheckpoints();
         }
+        this.drawPlayerAir();
         this.updateArrow();
     }
 
@@ -156,6 +166,62 @@ export default class RaceScene extends Phaser.Scene {
         }
     }
 
+    handleFeatures(time) {
+        const kart = this.player;
+        const event = updateFeatures(kart, this.track);
+        if (event === 'jump') {
+            this.popText(kart.x, kart.y - 60, 'WHOOSH!', '#ff922b');
+        } else if (event === 'bump') {
+            this.popText(kart.x, kart.y - 50, 'Boing!', '#ffffff');
+        } else if (event === 'splash') {
+            this.tip('water', 'Splash! Water is slow. Try the bridge!');
+        }
+        if (kart.inWater && Math.abs(kart.speed) > 20 && time - this.lastSplash > 110) {
+            this.lastSplash = time;
+            this.splash(kart.x, kart.y);
+        }
+    }
+
+    tip(key, message) {
+        if (this.shownTips[key] || !this.hud) return;
+        this.shownTips[key] = true;
+        this.hud.flashTip(message);
+    }
+
+    popText(x, y, text, color) {
+        const t = this.add.text(x, y, text, {
+            fontFamily: FONT, fontSize: '40px', fontStyle: 'bold', color, stroke: '#1d2b53', strokeThickness: 7
+        }).setOrigin(0.5).setDepth(8);
+        this.tweens.add({ targets: t, y: y - 60, alpha: 0, duration: 700, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
+    }
+
+    splash(x, y) {
+        for (let i = 0; i < 3; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const drop = this.add.circle(x + Math.cos(a) * 22, y + Math.sin(a) * 22, 7 + Math.random() * 5, i ? 0xe7f5ff : 0x74c0fc, 0.95).setDepth(6);
+            this.tweens.add({
+                targets: drop,
+                x: drop.x + Math.cos(a) * 40,
+                y: drop.y + Math.sin(a) * 40,
+                scale: 0.3,
+                alpha: 0,
+                duration: 420,
+                onComplete: () => drop.destroy()
+            });
+        }
+    }
+
+    drawPlayerAir() {
+        const kart = this.player;
+        const h = airHeight(kart);
+        kart.setScale(1 + 0.35 * h);
+        this.playerShadow.setVisible(h > 0.02);
+        if (h > 0.02) {
+            this.playerShadow.setPosition(kart.x + 14 * h, kart.y + 34 * h);
+            this.playerShadow.setScale(1 - 0.3 * h);
+        }
+    }
+
     nextTarget() {
         if (this.cpInLap < this.track.checkpoints.length) return this.track.checkpoints[this.cpInLap];
         const p = pointAt(this.track.loop, 0);
@@ -174,7 +240,9 @@ export default class RaceScene extends Phaser.Scene {
         this.refreshPause();
         const grade = this.grade;
         const problem = getProblemForGrade(grade);
-        const label = getGrade(grade).label + ' \u2022 Lap ' + (this.lap + 1) + ' \u2022 Star ' + this.cpInLap;
+        const lap = this.lap + 1;
+        const star = this.cpInLap;
+        const label = getGrade(grade).label + ' \u2022 Lap ' + lap + ' \u2022 Star ' + star;
         let scored = false;
         this.hud.showMathProblem(problem, { subtitle: label, rules: coinRules(grade) }, (result) => {
             if (scored) return 0;

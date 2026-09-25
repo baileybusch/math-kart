@@ -192,6 +192,13 @@ export default class RaceHudScene extends Phaser.Scene {
         this.tweens.add({ targets: text, alpha: 0, delay: 1100, duration: 400, onComplete: () => text.destroy() });
     }
 
+    flashTip(message) {
+        const t = this.add.text(W / 2, 128, message, textStyle(30, '#ffffff', {
+            stroke: INK, strokeThickness: 7
+        })).setOrigin(0.5).setDepth(50);
+        this.tweens.add({ targets: t, alpha: 0, delay: 2400, duration: 500, onComplete: () => t.destroy() });
+    }
+
     // -------------------------------------------------------------- modals
 
     openModal(depth) {

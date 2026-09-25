@@ -9,8 +9,9 @@
  *     picks Grade 7, taps START RACE, drives with two fingers, answers math
  *     stops (typed, hint, whiteboard), finishes the race, and unlocks the
  *     track ladder in the shop.
- *   - Every track (same profile): star 1 opens a Math Stop and the finish
- *     pays that track's prize.
+ *   - Every track (same profile): star 1 opens a Math Stop, water slows the
+ *     kart but the bridge doesn't, ramps launch it, the finish pays that
+ *     track's prize.
  *   - Phone landscape: whole game is visible (it used to be cut off).
  *   - Desktop: boots on WebGL; Grade 3, keyboard answer, mouse whiteboard.
  *   - Broken or missing bundle: the "couldn't start" banner appears.
@@ -147,6 +148,7 @@ const MATH = {
 };
 // Coin table from src/math/economy.js.
 const COINS = { 3: { right: 6, hintRight: 3, hintWrong: -3, wrong: -6 }, 7: { right: 10, hintRight: 5, hintWrong: -5, wrong: -10 } };
+const WATER_SPEED = 0.4;
 
 const mathState = (page) => page.evaluate(() => {
     const m = window.mathKart.game.scene.getScene('RaceHudScene').math;
@@ -223,6 +225,56 @@ const inkPixels = (page) => page.evaluate(() => {
     for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n++;
     return n;
 });
+
+/** Water slows the kart, the bridge doesn't, ramps launch it. */
+async function trackFeatures(page, id) {
+    const f = await race(page, () => {
+        const f = window.mathKart.game.scene.getScene('RaceScene').track.features;
+        const mid = f.bridge ? f.bridge.deck[Math.floor(f.bridge.deck.length / 2)] : null;
+        return {
+            river: f.river ? { x: f.river.cx, y: f.river.cy, dirX: f.river.dirX, dirY: f.river.dirY } : null,
+            deck: mid ? { x: mid.x, y: mid.y } : null,
+            ramps: f.ramps.map((r) => ({ kind: r.kind, x: r.x, y: r.y, dirX: r.dirX, dirY: r.dirY }))
+        };
+    });
+    const put = (x, y, dirX, dirY, speed) => page.evaluate(([x, y, dirX, dirY, speed]) => {
+        const p = window.mathKart.game.scene.getScene('RaceScene').player;
+        p.x = x; p.y = y; p.rotation = Math.atan2(dirX, -dirY); p.speed = speed === null ? p.maxSpeed : speed;
+        p.segHint = undefined; p.air = 0; p.boost = 0;
+    }, [x, y, dirX, dirY, speed]);
+    const player = () => race(page, () => {
+        const p = window.mathKart.game.scene.getScene('RaceScene').player;
+        return { speed: p.speed, max: p.maxSpeed, inWater: !!p.inWater, onBridge: !!p.onBridge, offRoad: p.offRoad, air: p.air, jumps: p.jumps || 0, splashes: p.splashes || 0, scale: p.scaleX };
+    });
+    await page.keyboard.down('ArrowUp');
+    try {
+        if (f.river) {
+            await put(f.river.x - f.river.dirX * 60, f.river.y - f.river.dirY * 60, f.river.dirX, f.river.dirY, null);
+            await page.waitForTimeout(350);
+            const wet = await player();
+            await shot(page, 'feature-' + id + '-ford');
+            check(wet.inWater && wet.speed <= wet.max * WATER_SPEED + 1 && wet.splashes >= 1, id + ': driving into the ford slows the kart to ' + Math.round(wet.speed) + ' (top speed ' + wet.max + ')');
+            const d = f.deck;
+            await put(d.x - f.river.dirX * 50, d.y - f.river.dirY * 50, f.river.dirX, f.river.dirY, null);
+            await page.waitForTimeout(180);
+            const dry = await player();
+            await shot(page, 'feature-' + id + '-bridge');
+            check(dry.onBridge && !dry.inWater && !dry.offRoad && dry.speed >= dry.max * 0.9, id + ': on the bridge there is no slow-down (' + Math.round(dry.speed) + ')');
+        }
+        if (f.ramps.length) {
+            const r = f.ramps.find((x) => x.kind === 'jump') || f.ramps[0];
+            const before = (await player()).jumps;
+            await put(r.x - r.dirX * 150, r.y - r.dirY * 150, r.dirX, r.dirY, null);
+            await page.waitForFunction((n) => (window.mathKart.game.scene.getScene('RaceScene').player.jumps || 0) > n, before, { timeout: 3000 });
+            await page.waitForTimeout(r.kind === 'jump' ? 200 : 80);
+            const up = await player();
+            await shot(page, 'feature-' + id + '-' + r.kind);
+            check(up.jumps > before && (up.air > 0 || up.speed > up.max), id + ': the ' + r.kind + ' launches the kart (air ' + up.air.toFixed(2) + ' s, speed ' + Math.round(up.speed) + ' of ' + up.max + ', scale ' + up.scale.toFixed(2) + ')');
+        }
+    } finally {
+        await page.keyboard.up('ArrowUp');
+    }
+}
 
 async function ipadIos12(browser, baseUrl) {
     console.log('\n[iPad mini / iOS 12 profile]');
@@ -452,6 +504,7 @@ async function ipadIos12(browser, baseUrl) {
     }, null, { timeout: 8000 });
     check(true, '"Race Again" starts a fresh race with a working HUD');
 
+
     await tapGame(page, 962, 46);
     await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceScene').menuPaused === true, null, { timeout: 3000 });
     await page.waitForTimeout(250);
@@ -573,6 +626,7 @@ async function allTracks(browser, baseUrl) {
         await page.waitForTimeout(250);
         const answered = await mathState(page);
         await keepRacing(page, tapGame);
+        await trackFeatures(page, course.id);
 
         const before = await raceStats(page);
         await race(page, () => {
@@ -591,6 +645,7 @@ async function allTracks(browser, baseUrl) {
         const prize = course.prizes[end.position - 1];
         check(answered.correct === true && end.coins - before.coins === prize,
             course.id + ': star 1 opened a Math Stop (answered right), finishing ' + end.position + ' paid ' + (end.coins - before.coins) + ' (expected ' + prize + ')');
+
     }
     check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
