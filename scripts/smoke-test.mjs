@@ -6,10 +6,13 @@
  * check-legacy-bundle.mjs. This script covers runtime behaviour:
  *   - "iPad mini / iOS 12" profile: iPad iOS 12 user agent, 1024x768 touch
  *     screen, WebGL disabled and post-iOS-12 APIs deleted. Boots on Canvas,
- *     taps START RACE, drives with two fingers, answers a math stop and
- *     finishes the race.
+ *     picks Grade 7, taps START RACE, drives with two fingers, answers math
+ *     stops (typed, hint, whiteboard), finishes the race, and unlocks the
+ *     track ladder in the shop.
+ *   - Every track (same profile): star 1 opens a Math Stop and the finish
+ *     pays that track's prize.
  *   - Phone landscape: whole game is visible (it used to be cut off).
- *   - Desktop: boots normally.
+ *   - Desktop: boots on WebGL; Grade 3, keyboard answer, mouse whiteboard.
  *   - Broken or missing bundle: the "couldn't start" banner appears.
  *
  * Env: CHROME_PATH=/path/to/chrome, SMOKE_SCREENSHOTS=/dir (optional).
@@ -124,7 +127,14 @@ const race = (page, fn) => page.evaluate(fn);
 
 // Game-space positions (see MENU_LAYOUT in MenuScene.js and MATH_LAYOUT in
 // ui/mathStop.js).
-const MENU = { grade3: [342, 214], grade7: [682, 214], start: [512, 612], shop: [512, 714] };
+const MENU = { grade3: [342, 214], grade7: [682, 214], start: [512, 612], shop: [512, 714], cards: [128, 320, 512, 704, 896], cardsY: 404 };
+// ShopScene.createTracks: 4 tiles 218 wide spread across a 944-wide panel at x=40.
+const SHOP_TRACK_XS = [0, 1, 2, 3].map((i) => 40 + 14.4 + i * (218 + 14.4) + 109);
+const SHOP_TRACK_BUTTON_Y = 484 + 226;
+const COURSES = [
+    { id: 'forest', prizes: [50, 30, 15] }, { id: 'desert', prizes: [60, 35, 20] }, { id: 'pine', prizes: [70, 40, 20] },
+    { id: 'snow', prizes: [80, 45, 25] }, { id: 'city', prizes: [90, 50, 30] }
+];
 const MATH = {
     hint: [174, 630], whiteboard: [454, 630], keepRacing: [314, 630],
     choiceX: 796, choiceRows2: [260, 420], choiceRows3: [222, 342, 462],
@@ -335,7 +345,7 @@ async function ipadIos12(browser, baseUrl) {
     check(resumed, '"Keep Racing" closes the math stop and racing resumes');
 
     // Typed Grade 7 answer + whiteboard + hint.
-    await race(page, () => { window.mathKart.game.scene.getScene('RaceScene').coins = 100; });
+    await race(page, () => { window.mathKart.game.scene.getScene('RaceScene').coins = 200; });
     const typedStop = await nextTypedStop(page, tapGame);
     check(typedStop.grade === 7, 'typed Grade 7 question: "' + typedStop.question.slice(0, 60) + '" (answer ' + typedStop.answer + ')');
     await typeOnKeypad(page, '12', tapGame);
@@ -467,6 +477,121 @@ async function ipadIos12(browser, baseUrl) {
     check(shopSave.currentColor === 'blue' && shopSave.coins === saved.coins - 20,
         'shop: bought and equipped blue paint (coins ' + saved.coins + ' -> ' + shopSave.coins + ')');
 
+    // Track ladder: Desert -> Pine -> Snow -> City, in order.
+    const readSave = () => page.evaluate(() => JSON.parse(localStorage.getItem('mathKartSave')));
+    const tapTrack = async (i) => { await tapGame(page, SHOP_TRACK_XS[i], SHOP_TRACK_BUTTON_Y); await page.waitForTimeout(350); };
+    await tapTrack(0);
+    const afterDesert = await readSave();
+    check(afterDesert.unlockedCourses.indexOf('desert') !== -1 && afterDesert.coins === shopSave.coins - 100,
+        'shop: unlocked Desert Canyon for 100 (coins ' + shopSave.coins + ' -> ' + afterDesert.coins + ')');
+    await tapTrack(1);
+    const poorPine = await readSave();
+    check(poorPine.unlockedCourses.indexOf('pine') === -1 && poorPine.coins === afterDesert.coins,
+        'shop: Pine Path (250) stays locked with only ' + afterDesert.coins + ' coins');
+    await page.evaluate(() => {
+        const s = JSON.parse(localStorage.getItem('mathKartSave'));
+        s.coins = 1500;
+        localStorage.setItem('mathKartSave', JSON.stringify(s));
+    });
+    await page.reload({ waitUntil: 'load' });
+    await waitForBoot(page);
+    await tapGame(page, MENU.shop[0], MENU.shop[1]);
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('ShopScene').sys.isActive(), null, { timeout: 5000 });
+    await page.waitForTimeout(300);
+    await tapTrack(2);
+    check((await readSave()).unlockedCourses.indexOf('snow') === -1, 'shop: Snow Circuit can\'t be bought before Pine Path');
+    await tapTrack(1);
+    await tapTrack(2);
+    await tapTrack(3);
+    const ladder = await readSave();
+    check(['pine', 'snow', 'city'].every((id) => ladder.unlockedCourses.indexOf(id) !== -1) && ladder.coins === 1500 - 250 - 450 - 700,
+        'shop: Pine 250 -> Snow 450 -> City 700 unlock in order (coins 1500 -> ' + ladder.coins + ')');
+    await shot(page, 'ipad-07b-track-ladder');
+    await tapGame(page, 104, 56);
+    await page.waitForFunction(() => window.mathKart.game.scene.getScene('MenuScene').sys.isActive(), null, { timeout: 5000 });
+    await page.waitForTimeout(300);
+    await tapGame(page, MENU.cards[3], MENU.cardsY);
+    await page.waitForTimeout(200);
+    check((await readSave()).lastCourse === 'snow', 'menu: tapping the Snow Circuit card selects it');
+    await shot(page, 'ipad-08-menu-all-tracks');
+    await tapGame(page, MENU.start[0], MENU.start[1]);
+    await page.waitForFunction(() => {
+        const r = window.mathKart.game.scene.getScene('RaceScene');
+        return r && r.sys.isActive() && r.track && r.track.id === 'snow' && r.raceStarted;
+    }, null, { timeout: 10000 });
+    check(true, 'START RACE opens Snow Circuit');
+
+    check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+    await context.close();
+}
+
+/** Every course on the iOS 12 profile: star 1 opens a Math Stop, the finish pays that course's prize. */
+async function allTracks(browser, baseUrl) {
+    console.log('\n[Every track, iPad mini / iOS 12 profile]');
+    const context = await browser.newContext({
+        viewport: { width: 1024, height: 768 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IPAD_IOS12_UA
+    });
+    await context.addInitScript(IOS12_SHIM);
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(baseUrl, { waitUntil: 'load' });
+    await waitForBoot(page);
+    await page.evaluate(() => {
+        const s = JSON.parse(localStorage.getItem('mathKartSave'));
+        s.unlockedCourses = ['forest', 'desert', 'pine', 'snow', 'city'];
+        localStorage.setItem('mathKartSave', JSON.stringify(s));
+    });
+    for (const course of COURSES) {
+        await page.goto(baseUrl, { waitUntil: 'load' });
+        await waitForBoot(page);
+        await page.waitForTimeout(250);
+        await tapGame(page, MENU.cards[COURSES.indexOf(course)], MENU.cardsY);
+        await page.waitForTimeout(150);
+        await tapGame(page, MENU.start[0], MENU.start[1]);
+        await page.waitForFunction((id) => {
+            const r = window.mathKart.game.scene.getScene('RaceScene');
+            return r && r.sys.isActive() && r.track && r.track.id === id && r.raceStarted;
+        }, course.id, { timeout: 10000 });
+        await shot(page, 'track-' + course.id);
+
+        await race(page, () => {
+            const r = window.mathKart.game.scene.getScene('RaceScene');
+            const cp = r.track.checkpoints[0];
+            r.player.x = cp.x + 40; r.player.y = cp.y;
+        });
+        await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceHudScene').modalOpen === true, null, { timeout: 5000 });
+        await page.waitForTimeout(350);
+        const s = await mathState(page);
+        if (s.mode === 'typed') {
+            await typeOnKeypad(page, s.answer, tapGame);
+            await tapGame(page, MATH.keys.check[0], MATH.keys.check[1]);
+        } else {
+            const p = choicePos(s, s.answer);
+            await tapGame(page, p[0], p[1]);
+        }
+        await page.waitForTimeout(250);
+        const answered = await mathState(page);
+        await keepRacing(page, tapGame);
+
+        const before = await raceStats(page);
+        await race(page, () => {
+            const r = window.mathKart.game.scene.getScene('RaceScene');
+            r.lap = 1;
+            r.cpInLap = r.track.checkpoints.length;
+            const p = r.track.loop.points[0];
+            r.player.x = p.x; r.player.y = p.y + 30;
+            r.player.segHint = 0;
+        });
+        await page.waitForFunction(() => window.mathKart.game.scene.getScene('RaceScene').raceFinished === true, null, { timeout: 5000 });
+        const end = await race(page, () => {
+            const r = window.mathKart.game.scene.getScene('RaceScene');
+            return { coins: r.coins, position: r.finishOrder.length + 1 };
+        });
+        const prize = course.prizes[end.position - 1];
+        check(answered.correct === true && end.coins - before.coins === prize,
+            course.id + ': star 1 opened a Math Stop (answered right), finishing ' + end.position + ' paid ' + (end.coins - before.coins) + ' (expected ' + prize + ')');
+    }
     check(errors.length === 0, 'no uncaught page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await context.close();
 }
@@ -537,8 +662,10 @@ async function desktop(browser, baseUrl) {
     }
     await page.waitForTimeout(300);
     const after = await raceStats(page);
+    const g3After = await mathState(page);
     check(after.coins - before.coins === COINS[3].right && after.correct === before.correct + 1,
-        'right answer, no hint: +' + COINS[3].right + ' (' + before.coins + ' -> ' + after.coins + ')');
+        'right answer, no hint: +' + COINS[3].right + ' (' + before.coins + ' -> ' + after.coins + ')' +
+        (g3After.correct ? '' : ' [' + g3After.mode + ' answer ' + g3After.answer + ', typed "' + g3After.typed + '", answered ' + g3After.answered + ']'));
     await keepRacing(page, click);
 
     // Whiteboard with a mouse.
@@ -594,6 +721,7 @@ async function main() {
     const browser = await chromium.launch({ executablePath, args: ['--no-sandbox'] });
     try {
         await ipadIos12(browser, baseUrl);
+        await allTracks(browser, baseUrl);
         await phoneLandscape(browser, baseUrl);
         await desktop(browser, baseUrl);
         await brokenBundle(browser, baseUrl);
