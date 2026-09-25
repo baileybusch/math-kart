@@ -1,5 +1,13 @@
 # 🎮 Math Kart - Final Delivery Summary
 
+> **Update:** the original build below showed a blank screen on iOS 12
+> (iPad mini 2) and was cut off on phones. Both are fixed; the game now
+> targets old iPad mini / iOS 12 Safari. See the "Old iPad mini / iOS 12
+> support" section of [NOTES.md](NOTES.md) for details and the iPad
+> checklist, and [QUICKSTART.md](QUICKSTART.md) for how to load the new
+> version on the iPad. Some details below (controls, screens) predate the
+> redesign.
+
 ## ✅ ALL COMPLETE - Ready to Play!
 
 Your Math Kart racing game is **100% ready** with all requested features plus iPad optimization!

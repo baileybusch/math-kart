@@ -1,5 +1,95 @@
 # Technical Notes - Math Kart
 
+## Old iPad mini / iOS 12 support
+
+**Primary device:** iPad mini 2 (A1489), stuck on iOS 12 Safari.
+
+### What was wrong
+1. **Blank dark screen on the iPad mini.** The first build shipped one
+   `<script type="module">` bundle. Phaser's own source is ES5-safe, but Vite's
+   default esbuild minify target (safari14) rewrote
+   `(pma === undefined || pma === null) ? true : pma` into `pma??!0`. `??`
+   only exists from Safari 13.1, so iOS 12 threw a SyntaxError while parsing
+   the whole file. No game code ran, leaving just the `#1a1a2e` page
+   background. (The bundle also used optional `catch {}` binding. It had no
+   real `?.` expressions; `?.` substrings only appeared inside strings and
+   regexes.)
+2. **"Looks like a screenshot" on a newer phone.** The canvas was sized to the
+   viewport (e.g. 585x390 on a phone in landscape) but every scene was laid
+   out for 1200x800, so the course buttons were off-canvas and nothing on
+   screen could be tapped.
+3. **Races couldn't be finished anywhere.** Arcade physics world bounds
+   defaulted to the game size while tracks were 2400x1600, so karts were
+   fenced out of checkpoints 1 and 2.
+4. Only one touch pointer was enabled, so holding GO while steering didn't
+   work. Answer buttons could be tapped more than once per question.
+   `localStorage` writes threw in iOS private browsing.
+
+### What changed
+- `@vitejs/plugin-legacy` with `renderModernChunks: false`: every browser
+  loads the same Babel-transpiled SystemJS bundle plus core-js polyfills
+  (targets `defaults, safari >= 11, ios_saf >= 11`).
+- `scripts/check-legacy-bundle.mjs` (`npm run check:legacy`) fails the build if
+  any shipped JS has a `?.`/`??` token or doesn't parse as ES2017, or if
+  `index.html` still relies on module scripts. Run against the old live
+  bundle, it reports the `pma=m??!0` token.
+- Renderer: Canvas on iOS ≤ 12 / no WebGL, `AUTO` elsewhere. If WebGL boot
+  throws, the game retries on Canvas; on `webglcontextlost` it reloads on
+  Canvas. `?renderer=canvas|webgl|auto` overrides.
+- An inline ES5 watchdog in `index.html` shows a "Math Kart couldn't start"
+  card (with a reason and a Try Again button) on script parse errors, failed
+  downloads, unhandled rejections or a 45 s boot timeout. After boot, runtime
+  errors show "Math Kart hit a bump!".
+- Fixed 1024x768 design resolution with `Scale.FIT`; four active pointers;
+  no Arcade physics (karts move with simple kinematics clamped to the track
+  size); audio disabled (unused, and iOS 12 WebAudio is fragile).
+- Only Graphics/Shape/Text primitives, so Canvas and WebGL look the same.
+  No gradients, shaders, blend modes, pointer events or ResizeObserver.
+
+### Automated checks
+- `npm run build`: production build
+- `npm run check:legacy`: syntax gate described above
+- `npm run test:smoke`: serves `dist/` and drives headless Chrome with an
+  "iPad iOS 12" profile (iPad iOS 12 UA, 1024x768 touch, WebGL disabled,
+  `ResizeObserver`/`PointerEvent`/`structuredClone`/etc. deleted). It checks
+  boot on Canvas, START RACE, two-finger driving, pause, a Math Stop
+  (one answer only), finishing, Race Again, Quit, and a shop purchase. It also
+  checks that the phone layout fits on screen and that a broken or missing
+  bundle shows the error card.
+- Headless Chrome is not Safari 12. The syntax check covers the parse error;
+  the checklist below covers real-device behaviour.
+
+### Manual checklist: iPad mini (iOS 12)
+Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
+
+1. [ ] Open `https://baileybusch.github.io/math-kart/?v=<new number>` in Safari.
+2. [ ] Within a few seconds you see the blue "MATH KART / Starting engines…"
+       screen, then the menu. Never a dark blank page.
+3. [ ] If instead you see "Math Kart couldn't start", note the grey details
+       line, tap Try Again, and if needed clear Website Data (Settings → Safari
+       → Advanced → Website Data → github.io → Delete).
+4. [ ] Landscape: the menu fills the screen; title, both track cards,
+       START RACE and SHOP are visible without scrolling or zooming.
+5. [ ] Tap the Forest card, then START RACE. The 3-2-1-GO countdown plays.
+6. [ ] Hold GO with the right thumb and steer with the left thumb at the
+       same time. The kart moves and turns smoothly (no big stutter).
+7. [ ] Drive off the road: the kart slows down on the grass.
+8. [ ] Follow the yellow arrow to star 1. The Math Stop appears, the question
+       fits on one line, and the answer buttons are easy to tap.
+9. [ ] Tap an answer twice quickly. Only one result shows; coins change once.
+       On a wrong answer, the right answer turns green.
+10. [ ] Tap II (pause) → Keep Racing resumes; II → Quit to Menu returns to
+        the menu.
+11. [ ] Finish a 2-lap race. The results card shows place, prize and
+        "Math: X of 6 right". Race Again, Shop and Menu all work.
+12. [ ] Shop: buy a paint color (if you have 20+ coins). The toast shows, coins
+        go down, and the new color is used in the next race.
+13. [ ] Close Safari fully (swipe it away), reopen the link: coins and
+        purchases are still there.
+14. [ ] Rotate to portrait: the game shrinks to fit and still works.
+15. [ ] Optional: open `?renderer=webgl` to compare. If it's blank or glitchy,
+        stay on the default (Canvas).
+
 ## What Was Built
 
 A complete working prototype of a Mario Kart-style educational racing game with:
@@ -7,7 +97,7 @@ A complete working prototype of a Mario Kart-style educational racing game with:
 ### Core Features Implemented
 ✅ Top-down kart racing with keyboard controls (Arrow Keys / WASD)  
 ✅ **Touch controls for iPad/tablets** (on-screen buttons)  
-✅ **Responsive design** for all screen sizes  
+✅ **Fixed 4:3 layout scaled to fit** any screen size  
 ✅ 2 complete race tracks (Forest and Desert)  
 ✅ Math checkpoint system - racing pauses for problems  
 ✅ Correct/incorrect answer feedback with coin rewards/penalties  
@@ -27,9 +117,9 @@ A complete working prototype of a Mario Kart-style educational racing game with:
 ✅ **GitHub Pages deployment** with live URL  
 
 ### Tech Stack
-- **Phaser 3** (v3.80.1) - 2D game framework with built-in physics
-- **Vite** (v5.0.0) - Lightning-fast dev server & build tool
-- **Vanilla JavaScript** (ES6 modules) - No framework overhead
+- **Phaser 3** (v3.90 via lockfile) - 2D game framework, Canvas renderer on old iOS
+- **Vite 5** + **@vitejs/plugin-legacy** - builds one Babel-transpiled bundle for iOS 11+ Safari
+- **Vanilla JavaScript** (ES modules in source, SystemJS in production) - No framework overhead
 - **localStorage API** - Progress persistence
 
 ### Architecture Highlights
@@ -69,26 +159,23 @@ The pack system is designed for easy expansion:
 3. Optionally adjust `coinMultiplier` for difficulty
 4. See README for detailed template
 
-#### Race Logic (`src/scenes/RaceScene.js`)
-- Physics-based movement with acceleration/drag
-- Checkpoint detection via distance calculation
-- Position calculation compares player vs AI progress
-- Math modal system pauses game state completely
+#### Race Logic (`src/scenes/RaceScene.js` + `RaceHudScene.js`)
+- Simple kinematic driving (accelerate / brake / coast), slower on grass
+- 2 laps x 3 checkpoint stars; the finish counts once all stars in the lap are done
+- Progress = distance along the track loop, so positions compare fairly
+- The HUD, touch pedals, Math Stop, pause and results run in a separate
+  overlay scene that never scrolls with the camera
 
 #### AI System (`src/game/AIKart.js`)
-- Simple waypoint-following AI
-- Each AI has slight speed randomization for varied races
-- Pauses/resumes during math checkpoints
-- Tracks progress along path for position calculations
+- Rides the track loop in its own lane with a little wobble
+- Gentle rubber-banding keeps races close
+- Pauses during countdown, Math Stops and pause
 
-#### Track System (`src/game/trackBuilder.js`)
-- Procedural track generation from curves
-- Each track defines:
-  - Visual layout (colors, decorations)
-  - Checkpoint positions
-  - AI waypoint path
-  - Start position
-- Easy to add new tracks by copying a builder function
+#### Track System (`src/game/trackBuilder.js`, `trackMath.js`)
+- Each course is one closed loop of waypoints; the road art, AI path,
+  checkpoints and progress tracking all come from it
+- Checkpoints are waypoint indexes; decorations are seeded so they're the same every race
+- Add a track by adding an entry to `COURSES`
 
 #### Progression System
 - Coins are the universal currency
@@ -144,10 +231,8 @@ const PACKS = {
 };
 ```
 
-Then in `RaceScene.js`, line ~28, change:
-```javascript
-this.currentProblem = getRandomProblem('division');
-```
+Registered packs are picked automatically by `getMixedProblem()`, which
+`RaceScene.showMathStop()` calls at every star.
 
 ### Example: Adding Fractions Pack
 
@@ -180,11 +265,11 @@ const fractionsPack = {
 
 1. **No difficulty scaling**: Currently uses hardcoded difficulty. Could add dynamic difficulty based on performance.
 
-2. **Single problem pack per race**: Could allow pack selection in menu or randomize packs per checkpoint.
+2. **No pack selection**: Packs are mixed randomly at every star. Could allow pack selection in the menu.
 
-3. **Fixed checkpoint count**: Always 3 checkpoints. Could vary by track.
+3. **Fixed checkpoint count**: Always 3 stars per lap, 2 laps. Could vary by track.
 
-4. **Simple AI**: Waypoint-following only. Could add rubber-banding, powerups, or strategic behavior.
+4. **Simple AI**: Rides a fixed lane with rubber-banding. Could add powerups or strategic behavior.
 
 5. **No sound/music**: Would significantly enhance kid appeal.
 
@@ -205,8 +290,6 @@ const fractionsPack = {
 - [ ] Add background music toggle
 - [ ] Implement 2-3 more math packs (multiplication, division, fractions)
 - [ ] Add a "random pack" mode that mixes problems
-- [ ] Add on-screen touch controls for tablets
-
 ### Medium Term (Enhanced Gameplay)
 - [ ] Add powerup items on track (speed boost, shield, etc.)
 - [ ] Implement 2-3 more tracks
@@ -240,12 +323,9 @@ Based on California 3rd Grade Math Standards:
 
 ## Testing Notes
 
-The game was built iteratively and should be fully functional on:
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-
-Mobile browsers may work but are not optimized (no touch controls).
+Primary target is iOS 12 Safari on an iPad mini 2 (see the checklist at the
+top). The build also targets current Chrome/Edge/Firefox/Safari and mobile
+Safari/Chrome; touch controls appear on any touch device.
 
 ## Performance
 
