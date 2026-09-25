@@ -49,20 +49,30 @@
 ### Automated checks
 - `npm run build`: production build
 - `npm run check:legacy`: syntax gate described above
+- `npm run test:unit`: plain Node. Generates 4000 problems per grade and
+  checks every one (answer accepted, wrong choices rejected, diagram numbers
+  really similar with x filled in, hints don't state the answer, desks are
+  longer than wide...), plus typed-answer parsing/tolerance and the coin table.
 - `npm run test:smoke`: serves `dist/` and drives headless Chrome with an
   "iPad iOS 12" profile (iPad iOS 12 UA, 1024x768 touch, WebGL disabled,
   `ResizeObserver`/`PointerEvent`/`structuredClone`/etc. deleted). It checks
-  boot on Canvas, START RACE, two-finger driving, pause, a Math Stop
-  (one answer only), finishing, Race Again, Quit, and a shop purchase. It also
-  checks that the phone layout fits on screen and that a broken or missing
-  bundle shows the error card.
+  boot on Canvas, picking Grade 7, START RACE, two-finger driving, pause, a
+  Math Stop (one answer only after a double tap), a typed Grade 7 answer, the
+  whiteboard (two-finger drawing that never reaches the pedals, then Done back
+  to the same question with the typed digits kept), a hint (+5 instead of
+  +10), a wrong answer with no hint (−10, correct answer shown), finishing,
+  Race Again, Quit, and a shop purchase. Desktop checks Grade 3 persistence, a
+  keyboard-typed answer (+6) and drawing with the mouse. It also checks that
+  the phone layout fits on screen and that a broken or missing bundle shows
+  the error card.
 - Headless Chrome is not Safari 12. The syntax check covers the parse error;
   the checklist below covers real-device behaviour.
 
 ### Manual checklist: iPad mini (iOS 12)
 Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 
-1. [ ] Open `https://baileybusch.github.io/math-kart/?v=<new number>` in Safari.
+1. [ ] Open `https://baileybusch.github.io/math-kart/?v=4` in Safari (use a
+       new number after each later deploy: `?v=5`, `?v=6`, ...).
 2. [ ] Within a few seconds you see the blue "MATH KART / Starting engines…"
        screen, then the menu. Never a dark blank page.
 3. [ ] If instead you see "Math Kart couldn't start", note the grey details
@@ -70,18 +80,34 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
        → Advanced → Website Data → github.io → Delete).
 4. [ ] Landscape: the menu fills the screen; title, both track cards,
        START RACE and SHOP are visible without scrolling or zooming.
-5. [ ] Tap the Forest card, then START RACE. The 3-2-1-GO countdown plays.
+5. [ ] Tap **Grade 7** (it turns green), then the Forest card, then START
+       RACE. The 3-2-1-GO countdown plays.
 6. [ ] Hold GO with the right thumb and steer with the left thumb at the
        same time. The kart moves and turns smoothly (no big stutter).
 7. [ ] Drive off the road: the kart slows down on the grass.
-8. [ ] Follow the yellow arrow to star 1. The Math Stop appears, the question
-       fits on one line, and the answer buttons are easy to tap.
-9. [ ] Tap an answer twice quickly. Only one result shows; coins change once.
-       On a wrong answer, the right answer turns green.
+8. [ ] Follow the yellow arrow to star 1. The Math Stop appears with a
+       Grade 7 question and (usually) two shapes with labeled sides. The
+       question and labels are readable without zooming.
+9. [ ] On a keypad question: tap digits, `.` and ⌫; they show in the answer
+       box. Tap Check twice quickly: only one result shows and coins change
+       once. On a button question, a wrong tap turns red and the right answer
+       turns green.
+9a. [ ] Tap **Whiteboard**. Draw with one finger, then two fingers at once;
+        try Red, Eraser, Undo, Clear and Grid. Tap **Done**: you're back on
+        the same question and any digits you typed are still there. The kart
+        didn't move while you drew.
+9b. [ ] Tap **Show hint**: a yellow hint appears and the corner text says
+        "Hint used: half coins, Right +5 Wrong −5". Answer right: "+5 coins"
+        in green. On another star, answer wrong without a hint: "−10 coins"
+        in red and "The answer is …" with the worked steps.
+9c. [ ] Quit to Menu, tap **Grade 3**, race again: the Math Stops are Grade 3
+        (+6 / −6). Close and reopen Safari: the grade you picked is still
+        selected.
 10. [ ] Tap II (pause) → Keep Racing resumes; II → Quit to Menu returns to
         the menu.
 11. [ ] Finish a 2-lap race. The results card shows place, prize and
-        "Math: X of 6 right". Race Again, Shop and Menu all work.
+        "Math: X of 6 right" (plus hints used). Race Again, Shop and Menu all
+        work.
 12. [ ] Shop: buy a paint color (if you have 20+ coins). The toast shows, coins
         go down, and the new color is used in the next race.
 13. [ ] Close Safari fully (swipe it away), reopen the link: coins and
@@ -89,6 +115,122 @@ Do this after each deploy (wait ~1-2 minutes for the Pages action to finish).
 14. [ ] Rotate to portrait: the game shrinks to fit and still works.
 15. [ ] Optional: open `?renderer=webgl` to compare. If it's blank or glitchy,
         stay on the default (Canvas).
+
+## Grades, hints and the scratch whiteboard (v4)
+
+### Grade select
+- Two grade cards on the menu: **Grade 3** (the three existing packs) and
+  **Grade 7** (Similar Figures). The choice is stored as `grade` in the
+  existing `mathKartSave` object, so it gets the same iOS private-mode
+  safety (in-memory fallback, best-effort `setItem`). Unknown values fall
+  back to Grade 3. Coins and shop items are shared between grades.
+- `src/math/grades.js` maps a grade to its packs; `RaceScene` asks for
+  `getProblemForGrade(save.grade)` at every star.
+
+### Grade 7: Similar Figures pack (`src/math/similarFigures.js`)
+Rooted in the 7.2.8.B "Similar Figures" homework sheet. The problem *types*
+come from the sheet; every problem is generated fresh, and no answers from a
+filled-in sheet are used as keys.
+
+| Type | Share | Answer | Example |
+|------|------:|--------|---------|
+| Similar or not? (rectangles, triangles) | 25% | Yes/No buttons | 4-6-8 vs 6-9-12 triangle |
+| Find x (rectangle, right triangle, parallelogram, L-shape) | 40% | 80% typed | 8×6 and 20×x, x = 15 |
+| Word problem: similar? (flag/drawing, poster/postcard, rug) | 8% | Yes/No | 60×36 flag vs 10×6 drawing |
+| Word problem: find it (desks, enlarged photo, tree shadow) | 17% | 75% typed | 30×18 desk, 50 long, 30 wide |
+| Scale factor from A to B | 5% | typed | 8×6 to 20×15, 2.5 |
+| Proportion `a/b = x/d` | 5% | typed | 3/4 = x/20, 15 |
+
+- Scale factors are drawn from a weighted list: halves, fifths and quarters
+  (1.5, 2, 2.5, 3, 3.5, 4, 1.8, 1.25) give clean decimals; thirds (4/3, 5/3,
+  7/3) give whole numbers or a repeating decimal. About 12% of typed Grade 7
+  answers repeat (like 6.666…), always in thirds so they round sensibly.
+- Diagrams: both shapes are drawn with correct proportions at a shared
+  scale (the small one never shrinks below half its own fit size), the
+  unknown side is a red **x** in a yellow bubble, and right angles are
+  marked. Similar-or-not pairs are drawn with their real side lengths, so a
+  non-similar pair looks a bit "off".
+- Multiple-choice find-x wrong answers are the classic mistakes: adding
+  the difference instead of multiplying, or using the scale factor upside
+  down.
+
+### Typed answers (`src/math/answers.js`)
+- About 50% of Grade 3 and 55% of Grade 7 problems (80% of find-x) need a
+  typed answer on the keypad: 0-9, `.`, `/` (Grade 7 only; greyed out for
+  Grade 3), ⌫ and Check. Keys are 86×74 game px (≈ 86×74 pt on an iPad
+  mini). On a computer, digits, `.`, `/`, Backspace and Enter also work.
+- Neat answers (≤ 2 decimals, like 15, 14.4, 2.25) must be exact. Repeating
+  answers accept anything within 0.05 (rounded to tenths or better): for
+  20/3 that's 6.7, 6.67, 6.66, 6.666 or the fraction `20/3`, but not 6.6.
+  Grade 7 keypad questions show a small tip: "round to 2 decimals (6.67) or
+  type a fraction (20/3)".
+- An empty or unfinished entry (`5/`) just shows "Type your answer first!"
+  and costs nothing.
+
+### Coins, hints and penalties
+Coins per Math Stop (`src/math/economy.js`), never below 0:
+
+|                      | Grade 3 | Grade 7 | Rule |
+|----------------------|:-------:|:-------:|------|
+| Right, no hint       | **+6**  | **+10** | +N |
+| Right, with a hint   | +3      | +5      | +ceil(N/2) |
+| Wrong, with a hint   | −3      | −5      | −ceil(N/2) |
+| Wrong, no hint       | **−6**  | **−10** | −N |
+
+Before this change it was +5 / −2 for everything.
+
+- Why: a younger kid was tapping answers at random. At +5/−2 a random tap on
+  a 3-button question was worth +0.33 coins on average, so guessing paid.
+  Now a random Grade 3 tap averages −2 coins and a random Yes/No tap in
+  Grade 7 averages 0, so asking for a hint (or using the whiteboard) is
+  always the better move.
+- Order: right > right with hint > 0 > wrong with hint > wrong with no hint.
+  A right answer with a hint always beats any wrong answer, and a flat wrong
+  guess without help is the worst outcome.
+- Wrong after a hint: one simple rule, half the no-hint penalty.
+- The Math Stop always shows the current stakes ("Right +10  Wrong −10 /
+  With a hint: +5 / −5"). After the hint it switches to "Hint used: half
+  coins / Right +5  Wrong −5" in orange.
+- Grade 7 pays more because the problems take longer; race prizes (50/30/15)
+  are unchanged.
+- Hints give a useful step, not the answer: "Scale factor = 20 ÷ 8 = 2.5
+  (big ÷ small). Now multiply 6 by 2.5.", "Compare matching sides, big ÷
+  small. 12 ÷ 8 = 1.5. Do the other matching sides give the same number?",
+  "Cross-multiply: 4 × x = 3 × 20…", "Add the tens first…", "Skip count by
+  6…". The unit test checks that no hint states the final answer.
+
+### After answering
+- A big green/red coin change ("+10 coins" / "−10 coins") and a message;
+  after a miss: "Not quite. The answer is x = 15." The hint box turns into
+  "Here's how: 6 × 2.5 = 15, so x = 15" (green "How it works" on a right
+  answer).
+- **Keep Racing ▶** closes it right away; otherwise it closes by itself
+  after 2.6 s (right) or 6 s (wrong).
+- Double-submit guard: the Math Stop resolves once (`state.answered` is set
+  before anything else, every key/button is locked), and `RaceScene` also
+  ignores a second result for the same stop, so coins can't be awarded
+  twice.
+
+### Scratch whiteboard (`src/ui/whiteboard.js`)
+- **Whiteboard** button on every Math Stop. Opens a full-screen DOM overlay
+  (z-index above the game, below the error card) with a `<canvas>` and a
+  toolbar: Pen (dark), Red, Eraser, Undo, Clear, Grid (light 40 px grid,
+  on by default) and **Done ✓** (Esc also closes). The question text is
+  shown in a corner pill.
+- iOS 12: Canvas 2D line segments with round caps, `touchstart/move/end`
+  listeners with `{ passive: false }` + `preventDefault` (no scrolling, no
+  emulated mouse events), mouse fallback for computers, no Pointer Events,
+  `ResizeObserver` or `OffscreenCanvas`. Backing store is capped at 2×
+  device pixels. The eraser uses `destination-out`; the grid is a CSS
+  background so erasing never removes it.
+- Multi-touch: each finger draws its own stroke. The overlay stops touch and
+  mouse events from bubbling to Phaser's window listeners, and the race is
+  paused during Math Stops anyway, so drawing can't press GO or steer. The
+  overlay is `display: none` when closed, so it can't eat race touches.
+- The Math Stop stays open underneath, so typed digits, hint state and
+  stakes are exactly as they were. Strokes are kept (and redrawn after a
+  rotation/resize) until the next question, which starts with a clean pad.
+  Nothing on the pad is graded.
 
 ## What Was Built
 
@@ -110,10 +252,12 @@ A complete working prototype of a Mario Kart-style educational racing game with:
   - 5 kart color options (20 coins each)
 ✅ localStorage persistence for all progress  
 ✅ Expandable math pack architecture  
-✅ **Three complete problem packs:**
-  1. **Addition/Subtraction with Units** (complete, 5 problem types)
-  2. **Multiplication Facts** (complete, beginner 3rd grade)
-  3. **Division Facts** (complete, beginner 3rd grade)
+✅ **Grade select** (Grade 3 / Grade 7) with four problem packs:
+  1. **Addition/Subtraction with Units** (Grade 3, 5 problem types)
+  2. **Multiplication Facts** (Grade 3, beginner)
+  3. **Division Facts** (Grade 3, beginner)
+  4. **Similar Figures & Proportions** (Grade 7, see above)
+✅ **Typed answers, hints, steeper wrong-guess penalty, scratch whiteboard**
 ✅ **GitHub Pages deployment** with live URL  
 
 ### Tech Stack
@@ -127,7 +271,7 @@ A complete working prototype of a Mario Kart-style educational racing game with:
 #### Math Pack System (`src/math/mathPacks.js`)
 The pack system is designed for easy expansion:
 - Each pack is a self-contained object with id, name, difficulty, and generation logic
-- `generateProblem()` returns structured problem data: `{ question, answer, choices[] }`
+- `generateProblem()` returns structured problem data: `{ question, answer, mode, choices[] | value+tolerance, hint, explain, diagram? }`
 - Central registry (`PACKS` object) makes adding new packs trivial
 - Problems are randomly generated each time for variety
 
@@ -144,20 +288,18 @@ The pack system is designed for easy expansion:
    - Multiply by 2
    - Multiply by 5
    - Multiply by 10
-   - Coin multiplier: 1.3× for harder content
 
 3. **division** (Complete) - 4 problem types:
    - Basic division facts (no remainders)
    - Divide by 2
    - Divide by 5
    - Divide by 10
-   - Coin multiplier: 1.4× for harder content
 
 **How to Add a New Pack:**
 1. Define pack object with `generateProblem()` method
 2. Add to `PACKS` registry
-3. Optionally adjust `coinMultiplier` for difficulty
-4. See README for detailed template
+3. Add its id to a grade in `src/math/grades.js`
+4. Run `npm run test:unit`; see README for the full template
 
 #### Race Logic (`src/scenes/RaceScene.js` + `RaceHudScene.js`)
 - Simple kinematic driving (accelerate / brake / coast), slower on grass
@@ -231,8 +373,9 @@ const PACKS = {
 };
 ```
 
-Registered packs are picked automatically by `getMixedProblem()`, which
-`RaceScene.showMathStop()` calls at every star.
+`RaceScene.showMathStop()` calls `getProblemForGrade(grade)` at every star,
+which picks one of that grade's packs at random. (The older examples in this
+section predate typed answers and hints; follow the README template.)
 
 ### Example: Adding Fractions Pack
 
@@ -265,7 +408,7 @@ const fractionsPack = {
 
 1. **No difficulty scaling**: Currently uses hardcoded difficulty. Could add dynamic difficulty based on performance.
 
-2. **No pack selection**: Packs are mixed randomly at every star. Could allow pack selection in the menu.
+2. **Grade-level selection only**: Kids pick Grade 3 or Grade 7; packs within a grade are mixed. Could allow picking single topics.
 
 3. **Fixed checkpoint count**: Always 3 stars per lap, 2 laps. Could vary by track.
 
@@ -343,7 +486,9 @@ Stored in `localStorage` under key `mathKartSave`:
   "currentColor": "blue",
   "speedUpgrades": 2,
   "handlingUpgrades": 1,
-  "difficulty": 1
+  "difficulty": 1,
+  "lastCourse": "forest",
+  "grade": 7
 }
 ```
 
