@@ -6,6 +6,8 @@ A complete working prototype of a Mario Kart-style educational racing game with:
 
 ### Core Features Implemented
 ✅ Top-down kart racing with keyboard controls (Arrow Keys / WASD)  
+✅ **Touch controls for iPad/tablets** (on-screen buttons)  
+✅ **Responsive design** for all screen sizes  
 ✅ 2 complete race tracks (Forest and Desert)  
 ✅ Math checkpoint system - racing pauses for problems  
 ✅ Correct/incorrect answer feedback with coin rewards/penalties  
@@ -18,8 +20,11 @@ A complete working prototype of a Mario Kart-style educational racing game with:
   - 5 kart color options (20 coins each)
 ✅ localStorage persistence for all progress  
 ✅ Expandable math pack architecture  
-✅ One complete problem pack (Addition/Subtraction with Units)  
-✅ One stub problem pack showing expansion pattern (Multiplication)  
+✅ **Three complete problem packs:**
+  1. **Addition/Subtraction with Units** (complete, 5 problem types)
+  2. **Multiplication Facts** (complete, beginner 3rd grade)
+  3. **Division Facts** (complete, beginner 3rd grade)
+✅ **GitHub Pages deployment** with live URL  
 
 ### Tech Stack
 - **Phaser 3** (v3.80.1) - 2D game framework with built-in physics
@@ -44,8 +49,19 @@ The pack system is designed for easy expansion:
    - Grams to kg conversions
    - Meters to cm conversions
 
-2. **multiplication** (Stub) - Basic multiplication tables
-   - Serves as template for expansion
+2. **multiplication** (Complete) - 4 problem types:
+   - Basic multiplication facts (2-5 × 2-10)
+   - Multiply by 2
+   - Multiply by 5
+   - Multiply by 10
+   - Coin multiplier: 1.3× for harder content
+
+3. **division** (Complete) - 4 problem types:
+   - Basic division facts (no remainders)
+   - Divide by 2
+   - Divide by 5
+   - Divide by 10
+   - Coin multiplier: 1.4× for harder content
 
 **How to Add a New Pack:**
 1. Define pack object with `generateProblem()` method

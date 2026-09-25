@@ -25,6 +25,14 @@ export default class RaceScene extends Phaser.Scene {
         this.raceFinished = false;
         this.isPaused = false;
 
+        // Touch control state
+        this.touchControls = {
+            left: false,
+            right: false,
+            forward: false,
+            backward: false
+        };
+
         // Create track
         this.track = createTrack(this, this.courseId);
         
@@ -43,6 +51,9 @@ export default class RaceScene extends Phaser.Scene {
 
         // UI
         this.createUI();
+
+        // Touch controls for iPad
+        this.createTouchControls();
 
         // Input
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -143,10 +154,16 @@ export default class RaceScene extends Phaser.Scene {
         const kart = this.player;
         const dt = delta / 1000;
 
+        // Check keyboard or touch for forward/backward
+        const isForward = this.cursors.up.isDown || this.wasd.up.isDown || this.touchControls.forward;
+        const isBackward = this.cursors.down.isDown || this.wasd.down.isDown || this.touchControls.backward;
+        const isLeft = this.cursors.left.isDown || this.wasd.left.isDown || this.touchControls.left;
+        const isRight = this.cursors.right.isDown || this.wasd.right.isDown || this.touchControls.right;
+
         // Forward/backward
-        if (this.cursors.up.isDown || this.wasd.up.isDown) {
+        if (isForward) {
             kart.speed = Math.min(kart.speed + kart.acceleration * dt, kart.maxSpeed);
-        } else if (this.cursors.down.isDown || this.wasd.down.isDown) {
+        } else if (isBackward) {
             kart.speed = Math.max(kart.speed - kart.acceleration * dt, -kart.maxSpeed * 0.5);
         } else {
             // Slow down
@@ -154,10 +171,10 @@ export default class RaceScene extends Phaser.Scene {
         }
 
         // Turning
-        if (this.cursors.left.isDown || this.wasd.left.isDown) {
+        if (isLeft) {
             kart.rotation -= kart.turnSpeed * dt;
         }
-        if (this.cursors.right.isDown || this.wasd.right.isDown) {
+        if (isRight) {
             kart.rotation += kart.turnSpeed * dt;
         }
 
@@ -198,7 +215,10 @@ export default class RaceScene extends Phaser.Scene {
         this.player.body.setVelocity(0, 0);
         this.aiKarts.forEach(ai => ai.pause());
 
-        this.currentProblem = getRandomProblem('add-subtract-units');
+        // Randomly select from all available packs
+        const packs = ['add-subtract-units', 'multiplication', 'division'];
+        const randomPack = Phaser.Utils.Array.GetRandom(packs);
+        this.currentProblem = getRandomProblem(randomPack);
 
         // Create modal backdrop
         const cam = this.cameras.main;
@@ -230,24 +250,24 @@ export default class RaceScene extends Phaser.Scene {
         }).setOrigin(0.5);
         modal.add(problemText);
 
-        // Answer buttons
+        // Answer buttons - bigger for touch
         const answers = this.currentProblem.choices;
         const buttonY = 40;
-        const spacing = 100;
+        const spacing = 120;
 
         answers.forEach((answer, index) => {
             const x = (index - 1) * spacing;
             
-            const btn = this.add.rectangle(x, buttonY, 90, 70, 0x4CAF50)
+            const btn = this.add.rectangle(x, buttonY, 100, 80, 0x4CAF50)
                 .setStrokeStyle(4, 0x000000)
                 .setInteractive({ useHandCursor: true });
 
             const text = this.add.text(x, buttonY, answer, {
-                fontSize: '32px',
+                fontSize: '36px',
                 fontFamily: 'Arial',
                 color: '#FFFFFF',
                 stroke: '#000000',
-                strokeThickness: 3
+                strokeThickness: 4
             }).setOrigin(0.5);
 
             btn.on('pointerdown', () => {
@@ -399,6 +419,79 @@ export default class RaceScene extends Phaser.Scene {
     updatePositions() {
         const position = this.calculatePosition();
         this.positionText.setText(`Position: ${position}${this.getOrdinalSuffix(position)}`);
+    }
+
+    createTouchControls() {
+        const cam = this.cameras.main;
+        const buttonSize = 80;
+        const buttonAlpha = 0.6;
+
+        // Left steering button
+        const leftBtn = this.add.circle(100, cam.height - 100, buttonSize / 2, 0x4CAF50, buttonAlpha)
+            .setScrollFactor(0)
+            .setDepth(1000)
+            .setInteractive();
+
+        this.add.text(100, cam.height - 100, '←', {
+            fontSize: '48px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+
+        leftBtn.on('pointerdown', () => { this.touchControls.left = true; });
+        leftBtn.on('pointerup', () => { this.touchControls.left = false; });
+        leftBtn.on('pointerout', () => { this.touchControls.left = false; });
+
+        // Right steering button
+        const rightBtn = this.add.circle(220, cam.height - 100, buttonSize / 2, 0x4CAF50, buttonAlpha)
+            .setScrollFactor(0)
+            .setDepth(1000)
+            .setInteractive();
+
+        this.add.text(220, cam.height - 100, '→', {
+            fontSize: '48px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+
+        rightBtn.on('pointerdown', () => { this.touchControls.right = true; });
+        rightBtn.on('pointerup', () => { this.touchControls.right = false; });
+        rightBtn.on('pointerout', () => { this.touchControls.right = false; });
+
+        // Forward/Gas button
+        const forwardBtn = this.add.circle(cam.width - 100, cam.height - 100, buttonSize / 2, 0xFF9800, buttonAlpha)
+            .setScrollFactor(0)
+            .setDepth(1000)
+            .setInteractive();
+
+        this.add.text(cam.width - 100, cam.height - 100, '↑', {
+            fontSize: '48px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+
+        forwardBtn.on('pointerdown', () => { this.touchControls.forward = true; });
+        forwardBtn.on('pointerup', () => { this.touchControls.forward = false; });
+        forwardBtn.on('pointerout', () => { this.touchControls.forward = false; });
+
+        // Backward/Brake button
+        const backwardBtn = this.add.circle(cam.width - 220, cam.height - 100, buttonSize / 2, 0xF44336, buttonAlpha)
+            .setScrollFactor(0)
+            .setDepth(1000)
+            .setInteractive();
+
+        this.add.text(cam.width - 220, cam.height - 100, '↓', {
+            fontSize: '48px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+
+        backwardBtn.on('pointerdown', () => { this.touchControls.backward = true; });
+        backwardBtn.on('pointerup', () => { this.touchControls.backward = false; });
+        backwardBtn.on('pointerout', () => { this.touchControls.backward = false; });
+
+        // Store references for cleanup
+        this.touchButtons = [leftBtn, rightBtn, forwardBtn, backwardBtn];
     }
 
     getOrdinalSuffix(num) {

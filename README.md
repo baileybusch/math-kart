@@ -2,6 +2,20 @@
 
 A Mario Kart-style racing game for 3rd graders that teaches math through fun gameplay! Race go-karts, solve math problems at checkpoints, earn coins, and unlock upgrades.
 
+## 🎮 PLAY NOW!
+
+**🌐 Live Game (iPad/Browser):** https://baileybusch.github.io/math-kart/
+
+✨ **iPad Optimized!** Works great on iPad Safari with touch controls. No installation needed — just open the link and play!
+
+## 📱 Perfect for iPad
+
+- **Touch controls** for easy gameplay on tablets
+- **Big, tap-friendly buttons** for math answers
+- **Responsive design** fits any screen size
+- **Full-screen mode** on iOS Safari
+- Works on desktop browsers too with keyboard controls
+
 ## 🎮 How to Play
 
 ### Quick Start (One Command)
@@ -27,19 +41,39 @@ Then open your browser to the URL shown (usually `http://localhost:5173`)
    - Kart color customization (20 coins each)
 
 ### Controls
-- **Driving**: Arrow Keys or WASD
-- **Math Problems**: Click the correct answer button
+- **iPad/Tablet**: Tap the on-screen buttons
+  - Left/Right arrows: Steer
+  - Up arrow: Gas
+  - Down arrow: Brake
+- **Desktop**: Arrow Keys or WASD
+- **Math Problems**: Tap/Click the correct answer button
 
 ## 🧮 Math Content
 
-Currently includes the **Addition & Subtraction with Units** pack covering:
+**Three complete problem packs included from day one:**
+
+### 1. Addition & Subtraction with Units
 - Simple addition (2-digit numbers)
 - Simple subtraction
 - Liquid volume conversions (mL ↔ L)
 - Mass conversions (g ↔ kg)  
 - Length conversions (m ↔ cm)
 
-**Difficulty**: Gentle early-year 3rd grade level. Problems adapt slightly as you play.
+### 2. Multiplication Facts (Beginner)
+- Basic times tables (2-5 × 2-10)
+- Multiply by 2
+- Multiply by 5
+- Multiply by 10
+- **Coin multiplier: 1.3×** (earn more for harder problems!)
+
+### 3. Division Facts (Beginner)
+- Basic division (no remainders)
+- Divide by 2
+- Divide by 5
+- Divide by 10
+- **Coin multiplier: 1.4×** (earn even more!)
+
+**Difficulty**: Gentle early-year 3rd grade level. Problems randomly mix from all three packs during races.
 
 ## 🎨 Features
 

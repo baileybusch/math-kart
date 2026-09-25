@@ -170,34 +170,142 @@ const addSubtractUnitsPack = {
 };
 
 // ============================================================================
-// PACK: Multiplication (Example stub for expansion)
+// PACK: Multiplication (Beginner - Early 3rd Grade)
 // ============================================================================
 const multiplicationPack = {
     id: 'multiplication',
-    name: 'Multiplication',
+    name: 'Multiplication Facts',
     difficulty: 2,
-    coinMultiplier: 1.5,
+    coinMultiplier: 1.3,
     
     generateProblem() {
-        const a = Phaser.Math.Between(2, 12);
-        const b = Phaser.Math.Between(2, 12);
+        const types = [
+            'basic-facts',
+            'by-2',
+            'by-5',
+            'by-10'
+        ];
+        
+        const type = Phaser.Math.RND.pick(types);
+        
+        switch (type) {
+            case 'basic-facts':
+                return this.generateBasicFacts();
+            case 'by-2':
+                return this.generateMultiplyBy(2);
+            case 'by-5':
+                return this.generateMultiplyBy(5);
+            case 'by-10':
+                return this.generateMultiplyBy(10);
+        }
+    },
+    
+    generateBasicFacts() {
+        // Focus on 2-5 times tables for beginners
+        const a = Phaser.Math.Between(2, 5);
+        const b = Phaser.Math.Between(2, 10);
         const answer = a * b;
         
         return {
             question: `${a} × ${b} = ?`,
             answer: answer.toString(),
-            choices: this.generateChoices(answer)
+            choices: this.generateChoices(answer, 5)
         };
     },
     
-    generateChoices(correctAnswer) {
+    generateMultiplyBy(multiplier) {
+        const other = Phaser.Math.Between(2, 10);
+        const answer = multiplier * other;
+        
+        return {
+            question: `${multiplier} × ${other} = ?`,
+            answer: answer.toString(),
+            choices: this.generateChoices(answer, multiplier)
+        };
+    },
+    
+    generateChoices(correctAnswer, spread) {
         const choices = [correctAnswer.toString()];
         
         while (choices.length < 3) {
-            const offset = Phaser.Math.Between(-10, 10);
+            const offset = Phaser.Math.Between(-spread, spread);
             if (offset === 0) continue;
             
-            const wrong = Math.max(0, correctAnswer + offset);
+            const wrong = Math.max(1, correctAnswer + offset);
+            const wrongStr = wrong.toString();
+            
+            if (!choices.includes(wrongStr)) {
+                choices.push(wrongStr);
+            }
+        }
+        
+        return Phaser.Utils.Array.Shuffle(choices);
+    }
+};
+
+// ============================================================================
+// PACK: Division (Beginner - Early 3rd Grade)
+// ============================================================================
+const divisionPack = {
+    id: 'division',
+    name: 'Division Facts',
+    difficulty: 2,
+    coinMultiplier: 1.4,
+    
+    generateProblem() {
+        const types = [
+            'basic-facts',
+            'by-2',
+            'by-5',
+            'by-10'
+        ];
+        
+        const type = Phaser.Math.RND.pick(types);
+        
+        switch (type) {
+            case 'basic-facts':
+                return this.generateBasicFacts();
+            case 'by-2':
+                return this.generateDivideBy(2);
+            case 'by-5':
+                return this.generateDivideBy(5);
+            case 'by-10':
+                return this.generateDivideBy(10);
+        }
+    },
+    
+    generateBasicFacts() {
+        // Simple division with numbers 2-5
+        const divisor = Phaser.Math.Between(2, 5);
+        const quotient = Phaser.Math.Between(2, 10);
+        const dividend = divisor * quotient;
+        
+        return {
+            question: `${dividend} ÷ ${divisor} = ?`,
+            answer: quotient.toString(),
+            choices: this.generateChoices(quotient, 3)
+        };
+    },
+    
+    generateDivideBy(divisor) {
+        const quotient = Phaser.Math.Between(2, 10);
+        const dividend = divisor * quotient;
+        
+        return {
+            question: `${dividend} ÷ ${divisor} = ?`,
+            answer: quotient.toString(),
+            choices: this.generateChoices(quotient, 2)
+        };
+    },
+    
+    generateChoices(correctAnswer, spread) {
+        const choices = [correctAnswer.toString()];
+        
+        while (choices.length < 3) {
+            const offset = Phaser.Math.Between(-spread, spread);
+            if (offset === 0) continue;
+            
+            const wrong = Math.max(1, correctAnswer + offset);
             const wrongStr = wrong.toString();
             
             if (!choices.includes(wrongStr)) {
@@ -214,7 +322,8 @@ const multiplicationPack = {
 // ============================================================================
 const PACKS = {
     'add-subtract-units': addSubtractUnitsPack,
-    'multiplication': multiplicationPack
+    'multiplication': multiplicationPack,
+    'division': divisionPack
 };
 
 /**
