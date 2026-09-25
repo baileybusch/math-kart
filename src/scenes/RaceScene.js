@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getSaveData, updateSaveData } from '../utils/saveManager.js';
-import { getMixedProblem } from '../math/mathPacks.js';
+import { getProblemForGrade, normalizeGrade } from '../math/grades.js';
+import { coinDelta, applyCoins } from '../math/scoring.js';
 import { createTrack } from '../game/trackBuilder.js';
 import { nearestOnLoop, pointAt } from '../game/trackMath.js';
 import AIKart from '../game/AIKart.js';
@@ -8,8 +9,15 @@ import { COLORS, drawKart, kartColor } from '../ui/theme.js';
 
 export const LAPS = 2;
 export const PRIZES = [50, 30, 15];
-const CORRECT_COINS = 5;
-const WRONG_COINS = 2;
+
+// Smoke tests set window.__mathKartForce = { kind, input, pack } to pick the
+// next Math Stop's problem type. Used once, then cleared.
+function takeForcedProblem() {
+    if (typeof window === 'undefined' || !window.__mathKartForce) return null;
+    const force = window.__mathKartForce;
+    window.__mathKartForce = null;
+    return force;
+}
 
 export default class RaceScene extends Phaser.Scene {
     constructor() {
@@ -26,6 +34,7 @@ export default class RaceScene extends Phaser.Scene {
         updateSaveData(save);
 
         this.coins = save.coins;
+        this.grade = normalizeGrade(save.grade);
         this.lap = 0;
         this.cpInLap = 0;
         this.raceStarted = false;
@@ -34,7 +43,7 @@ export default class RaceScene extends Phaser.Scene {
         this.menuPaused = false;
         this.inMathStop = false;
         this.finishOrder = [];
-        this.stats = { correct: 0, asked: 0 };
+        this.stats = { correct: 0, asked: 0, hints: 0 };
         this.hud = null;
 
         this.track = createTrack(this, this.courseId);
@@ -217,17 +226,19 @@ export default class RaceScene extends Phaser.Scene {
         if (!this.hud) return;
         this.inMathStop = true;
         this.refreshPause();
-        const problem = getMixedProblem();
-        const label = 'Lap ' + (this.lap + 1) + ' \u2022 Star ' + this.cpInLap;
-        this.hud.showMathProblem(problem, label, (correct) => {
+        const problem = getProblemForGrade(this.grade, takeForcedProblem());
+        const label = 'Grade ' + this.grade + ' \u2022 Lap ' + (this.lap + 1) + ' \u2022 Star ' + this.cpInLap;
+        let scored = false;
+        this.hud.showMathProblem(problem, label, (result) => {
+            const delta = coinDelta(result.correct, result.hintUsed);
+            if (scored) return delta;
+            scored = true;
             this.stats.asked++;
-            if (correct) {
-                this.stats.correct++;
-                this.coins += CORRECT_COINS;
-            } else {
-                this.coins = Math.max(0, this.coins - WRONG_COINS);
-            }
+            if (result.correct) this.stats.correct++;
+            if (result.hintUsed) this.stats.hints++;
+            this.coins = applyCoins(this.coins, delta);
             this.persistCoins();
+            return delta;
         }, () => {
             this.inMathStop = false;
             this.refreshPause();

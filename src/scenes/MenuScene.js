@@ -6,6 +6,7 @@ import {
     createButton, createCoinPill, fadeToScene, kartColor
 } from '../ui/theme.js';
 import { markBooted } from '../boot.js';
+import { GRADES, normalizeGrade } from '../math/grades.js';
 
 const W = GAME_WIDTH;
 const DESERT_PRICE = 100;
@@ -24,30 +25,33 @@ export default class MenuScene extends Phaser.Scene {
         const save = getSaveData();
         this.save = save;
         this.selected = save.unlockedCourses.indexOf(save.lastCourse) !== -1 ? save.lastCourse : 'forest';
+        this.grade = normalizeGrade(save.grade);
         this.cameras.main.fadeIn(200, 0, 0, 0);
 
         this.drawBackground();
 
-        const title = addTitle(this, W / 2, 96, 'MATH KART', 104);
-        this.tweens.add({ targets: title, y: 104, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-        this.add.text(W / 2, 178, 'Race, solve math, win coins!', textStyle(32, '#ffffff', {
+        const title = addTitle(this, W / 2, 70, 'MATH KART', 92);
+        this.tweens.add({ targets: title, y: 77, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.add.text(W / 2, 140, 'Race, solve math, win coins!', textStyle(28, '#ffffff', {
             stroke: INK, strokeThickness: 7
         })).setOrigin(0.5);
 
         createCoinPill(this, W - 118, 46, save.coins);
 
+        this.createGradePicker(222);
+
         this.cards = COURSE_CARDS.map((card) => this.createCourseCard(card));
         this.refreshCards();
 
-        createButton(this, W / 2, 568, {
-            width: 460, height: 118, radius: 36,
-            label: 'START RACE  \u25B6', fontSize: 52,
+        createButton(this, W / 2, 610, {
+            width: 460, height: 104, radius: 36,
+            label: 'START RACE  \u25B6', fontSize: 50,
             color: COLORS.green,
             onTap: () => fadeToScene(this, 'RaceScene', { course: this.selected })
         });
 
-        createButton(this, W / 2, 690, {
-            width: 340, height: 86, radius: 30,
+        createButton(this, W / 2, 714, {
+            width: 300, height: 72, radius: 28,
             label: 'SHOP', fontSize: 40,
             color: COLORS.purple,
             onTap: () => fadeToScene(this, 'ShopScene')
@@ -83,7 +87,7 @@ export default class MenuScene extends Phaser.Scene {
     createCourseCard(card) {
         const info = getCourseInfo(card.id);
         const unlocked = this.save.unlockedCourses.indexOf(card.id) !== -1;
-        const c = this.add.container(card.x, 355);
+        const c = this.add.container(card.x, 410);
 
         const glow = this.add.graphics();
         const g = this.add.graphics();
@@ -129,6 +133,40 @@ export default class MenuScene extends Phaser.Scene {
         c.add(hit);
 
         return { id: card.id, container: c, glow, unlocked };
+    }
+
+    createGradePicker(y) {
+        this.gradeButtons = GRADES.map((grade, i) => {
+            const x = W / 2 + (i - (GRADES.length - 1) / 2) * 300;
+            const glow = this.add.graphics();
+            glow.fillStyle(COLORS.yellow, 1);
+            glow.fillRoundedRect(x - 150, y - 52, 300, 108, 34);
+            const btn = createButton(this, x, y, {
+                width: 272, height: 92, radius: 28,
+                label: grade.label + '\n' + grade.blurb, fontSize: 28,
+                color: COLORS.blue,
+                onTap: () => this.pickGrade(grade.id)
+            });
+            return { id: grade.id, btn, glow };
+        });
+        this.refreshGrades();
+    }
+
+    pickGrade(id) {
+        this.grade = id;
+        const save = getSaveData();
+        save.grade = id;
+        updateSaveData(save);
+        this.refreshGrades();
+    }
+
+    refreshGrades() {
+        this.gradeButtons.forEach((g) => {
+            const on = g.id === this.grade;
+            g.glow.setVisible(on);
+            g.btn.setColor(on ? COLORS.orange : COLORS.blue);
+            g.btn.setScale(on ? 1.04 : 0.94);
+        });
     }
 
     refreshCards() {

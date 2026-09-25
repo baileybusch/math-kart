@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unit test math content (answers, hints, coin rules)
+        run: npm run test:unit
+
       - name: Build
         run: npm run build
 
