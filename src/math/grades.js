@@ -2,7 +2,7 @@ import { pick } from './random.js';
 import { getRandomProblem } from './mathPacks.js';
 
 export const GRADES = [
-    { id: 3, label: 'Grade 3', blurb: 'Add, subtract, units, \u00D7 \u00F7', packs: ['add-subtract-units', 'multiplication', 'division'] },
+    { id: 3, label: 'Grade 3', blurb: 'Add, subtract, units, \u00D7 \u00F7', packs: ['add-subtract-units', 'multiplication', 'division', 'simplifying-strategy', 'benchmark-numbers', 'number-bond-arrow', 'rounding'] },
     { id: 7, label: 'Grade 7', blurb: 'Similar figures & ratios', packs: ['similar-figures'] }
 ];
 

@@ -496,24 +496,53 @@ The pack system is designed for easy expansion:
 - Problems are randomly generated each time for variety
 
 **Included Packs:**
-1. **add-subtract-units** (Complete) - 5 problem types:
+
+**Grade 3:**
+1. **add-subtract-units** - 5 problem types:
    - Simple addition (2-digit)
    - Simple subtraction (2-digit)
    - mL to L conversions
    - Grams to kg conversions
    - Meters to cm conversions
 
-2. **multiplication** (Complete) - 4 problem types:
+2. **multiplication** - 4 problem types:
    - Basic multiplication facts (2-5 × 2-10)
    - Multiply by 2
    - Multiply by 5
    - Multiply by 10
 
-3. **division** (Complete) - 4 problem types:
+3. **division** - 4 problem types:
    - Basic division facts (no remainders)
    - Divide by 2
    - Divide by 5
    - Divide by 10
+
+4. **simplifying-strategy** - Compensation/make-a-friendly-number addition:
+   - 2-digit + 2-digit and 3-digit + 2-digit/3-digit (sums ≤ 1000)
+   - Transform one addend to a friendly number (ending in 0, 00, 25, 50, 75)
+   - Example: 198 + 46 → 200 + 44 = 244
+   - Hint shows the rewritten easier problem with steps
+
+5. **benchmark-numbers** - Use friendly benchmark numbers for addition:
+   - Benchmarks: 10, 25, 50, 75, 100, 250, 500
+   - Example: 48 + 27: 48 ≈ 50, so 50 + 27 = 77, then 77 - 2 = 75
+   - Hint shows which benchmark to use and how to adjust
+
+6. **number-bond-arrow** - Visual addition and subtraction strategies:
+   - **Number bond**: break one addend to make tens/hundreds
+     (e.g. 67 + 25: break 25 = 3 + 22, so 67 + 3 = 70, then 70 + 22 = 92)
+   - **Arrow way**: chained jumps for addition/subtraction
+     (e.g. 136 + 57: 136→140→190→193; or 145 - 38: 145→140→110→107)
+   - Hint shows the bond breakdown or arrow jumps
+
+7. **rounding** - Round to nearest ten or hundred:
+   - Round to nearest 10: 2-digit and 3-digit numbers
+   - Round to nearest 100: 3-digit numbers
+   - Includes edge cases: 5 → 10, 95 → 100, 950 → 1000
+   - Hint shows number line with endpoints and midpoint
+
+**Grade 7:**
+8. **similar-figures** - Similar Figures, ratios and proportions (see README)
 
 **How to Add a New Pack:**
 1. Define pack object with `generateProblem()` method
