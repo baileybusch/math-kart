@@ -111,15 +111,25 @@ Then open the URL shown (usually `http://localhost:5173/math-kart/`).
 
 Pick a grade on the menu. Every problem is generated fresh each time.
 
-### Grade 3 (add, subtract, units, × ÷)
-Three packs, mixed at every star:
+### Grade 3 (add, subtract, units, × ÷, strategies)
+Seven packs, mixed at every star:
 - **Addition & Subtraction with Units**: 2-digit add/subtract, mL ↔ L,
   g ↔ kg, m ↔ cm
 - **Multiplication Facts**: times tables 2-5 × 2-10, ×2, ×5, ×10
 - **Division Facts**: no remainders, ÷2, ÷5, ÷10
+- **Simplifying Strategies**: compensation / make-a-friendly-number for
+  2-digit and 3-digit addition (e.g. 198 + 46 → 200 + 44)
+- **Benchmark Numbers**: use friendly numbers like 10, 25, 50, 75, 100
+  to simplify addition (e.g. 48 + 27: 48 ≈ 50, so 50 + 27 = 77, minus 2)
+- **Number Bond & Arrow Way**: visual strategies for addition and
+  subtraction—break numbers into parts to make tens/hundreds (bonds) or
+  use chained jumps (arrow way: 136 + 57 = 136→140→190→193)
+- **Rounding Numbers**: round to the nearest ten or hundred (2-digit and
+  3-digit numbers, including edge cases like 5 → 10, 95 → 100, 950 → 1000)
 
-Hints break the problem into steps ("Add the tens first…", "Skip count
-by 6…", "Draw 3 rows of 7 dots on the whiteboard").
+Hints break problems into steps and show strategies ("Make 198 friendly:
+198 + 2 = 200…", "Number bond: break 25 into 3 + 22…", "Number line:
+95 is between 90 and 100. Midpoint is 95, so round up…").
 
 ### Grade 7: Similar Figures, ratios and proportions
 Modeled on a 7th-grade "Similar Figures" homework sheet (7.2.8.B), with
